@@ -8,6 +8,9 @@ jobs:
   test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    env:
+      # tests/run.sh pins collation itself, but keep CI deterministic too.
+      LC_ALL: C
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +39,9 @@ jobs:
   sanitizers:
     name: ASan + UBSan
     runs-on: ubuntu-latest
+    env:
+      # tests/run.sh pins collation itself, but keep CI deterministic too.
+      LC_ALL: C
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y build-essential
@@ -74,6 +80,9 @@ jobs:
   alsa:
     name: ALSA backend
     runs-on: ubuntu-latest
+    env:
+      # tests/run.sh pins collation itself, but keep CI deterministic too.
+      LC_ALL: C
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y build-essential libasound2-dev
