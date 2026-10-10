@@ -19,13 +19,29 @@ TARGET   = $(SRCDIR)/sbagen-fixed
 SRC      = $(SRCDIR)/sbagen.c
 # These are #include'd into sbagen.c rather than compiled separately, so they
 # must be listed as prerequisites or edits to them will not trigger a rebuild.
-INCLUDES = $(SRCDIR)/mp3dec.c $(SRCDIR)/oggdec.c
+INCLUDES = $(SRCDIR)/mp3dec.c $(SRCDIR)/oggdec.c $(SRCDIR)/encdec.c
 ALSA_LIB ?= $(shell pkg-config --libs alsa 2>/dev/null)
 ALSA_CFLAGS ?= $(shell pkg-config --cflags alsa 2>/dev/null)
 HAVE_ALSA := $(shell pkg-config --exists alsa 2>/dev/null && echo yes)
 
 CFLAGS_COMMON = -DT_POSIX -DANSI_TTY -Wall
 LDLIBS  = -lm -lpthread
+
+# Compressed output (-w flac / -w opus).  Both are optional: without them the
+# -w option reports that no encoder is compiled in.
+FLAC_CFLAGS := $(shell pkg-config --cflags flac 2>/dev/null)
+FLAC_LIBS   := $(shell pkg-config --libs flac 2>/dev/null)
+ifneq ($(FLAC_LIBS),)
+CFLAGS_COMMON += -DHAVE_FLAC $(FLAC_CFLAGS)
+LDLIBS += $(FLAC_LIBS)
+endif
+
+OPUS_CFLAGS := $(shell pkg-config --cflags opus 2>/dev/null)
+OPUS_LIBS   := $(shell pkg-config --libs opus 2>/dev/null)
+ifneq ($(OPUS_LIBS),)
+CFLAGS_COMMON += -DHAVE_OPUS $(OPUS_CFLAGS)
+LDLIBS += $(OPUS_LIBS)
+endif
 
 # MP3/OGG mixing.  The 1.4.5 libs/ directory ships i686 archives, which cannot
 # be linked into a 64-bit build, so probe each archive for 64-bit ELF objects

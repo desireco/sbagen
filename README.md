@@ -71,6 +71,40 @@ passed: 76   failed: 8   skipped: 0
 The upstream code is clean under ASan+UBSan across all bundled examples once
 these defects are fixed.
 
+### Compressed output
+
+Upstream could only write raw audio or RIFF/WAV, which is about 0.6 GB per
+hour of 16-bit stereo. A 21:00-to-07:00 sleep session is over 6 GB -- past
+the 4 GB WAV ceiling and anyone's patience with an ffmpeg one-liner.
+
+```
+sbagen-fixed -S -w opus -o night.opus -L 10:00:00 -i '180+8/0.35 pink/0.12'
+sbagen-fixed -S -w flac -o focus.flac -L 01:00:00 focus-10-a.sbg
+```
+
+| Format | Size vs WAV | Notes |
+| --- | --- | --- |
+| `flac` | ~7x smaller | Lossless; decodes back to identical samples |
+| `opus` | ~13x smaller | Lossy; needs 48 kHz, selected automatically |
+
+The same 10-hour sleep session comes to 462 MB instead of 6 GB, and renders
+in under four minutes.
+
+Both feed the encoder from the same `writeOut()` choke point the WAV path uses,
+so the generated audio is identical; only the container differs. The test suite
+verifies this by decoding the result and comparing against the WAV render.
+
+Opus is defined for 48 kHz only. Rather than resample, the rate is raised to
+48 kHz before the DSP runs -- `out_rate` drives the oscillator increments in
+`corrVal()`, so the identical waveform is generated natively at the higher
+rate. No filtering, no aliasing, and no resampler to get wrong. An explicit
+`-r` is honoured and enforced; a rate Opus cannot represent is refused rather
+than silently resampled.
+
+Raw Opus packets have no framing, so a bare `.opus` file cannot be played.
+`libopusfile` turned out to be a decode-only library with no write API, so the
+Ogg container is written directly using libogg.
+
 ### ALSA backend
 
 Upstream's `T_LINUX` build targets `/dev/dsp` (OSS), which no current kernel
@@ -98,11 +132,32 @@ Requires a C compiler, and `libasound2-dev` for the ALSA target
 make
 ```
 
-MP3/OGG mixing is not built here by default: upstream's `libs/` contains i686
-archives that cannot link into a 64-bit build. The Makefile probes each
-archive's ELF class and skips them cleanly rather than failing the link. To
-enable codecs, build 64-bit `libmad` and `libvorbisidec` and place them in
-`dev/libs/` as `linux-libmad.a` and `linux-libvorbisidec.a`.
+MP3/OGG mixing (`-m`) is not built here by default. Run `make codecs` once to
+build the required 64-bit libraries -- see below.
+
+Compressed output (`-w`) needs `libFLAC` and `libopus`, both detected with
+`pkg-config`. Without them `-w` reports that no encoder is compiled in.
+
+## Building the codec libraries
+
+`make codecs` runs `tests/build-codecs.sh`, which builds 64-bit static
+`libmad`, Ogg Vorbis Tremor and `libogg` into `dev/libs/`. They cannot come
+from the system for two reasons:
+
+- **libmad** is not packaged on Arch, and upstream's `libs/` only ships i686
+  archives that cannot link into a 64-bit build.
+- **Tremor** is required because `oggdec.c` is written against it.
+  `ov_read()` in Tremor takes 4 arguments; the floating-point `libvorbisfile`
+  that distributions ship takes 7. Linking against it compiles without
+  complaint and then produces nothing but "Recoverable error in Ogg stream" at
+  runtime, because the arguments land in the wrong registers.
+
+Tremor's headers land in `dev/libs64/`, kept separate from the 2002-era
+copies in `dev/libs/`. Those declare `ogg_sync_state` and `ogg_stream_state`
+as pointers, making `OggVorbis_File` 448 bytes where the real one is 864;
+mixing the old headers with a current library overflows the caller's struct
+on the first `ov_open()` call. The build script asserts the size is 864 so the
+old headers cannot quietly come back.
 
 ## Generating audio
 

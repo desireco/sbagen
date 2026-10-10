@@ -241,6 +241,9 @@ void create_slide(int ac, char **av);
 #ifdef MP3_DECODE
 #include "mp3dec.c"
 #endif
+#if defined(HAVE_FLAC) || defined(HAVE_OPUS)
+#include "encdec.c"
+#endif
 
 #ifdef WIN_AUDIO
 void CALLBACK win32_audio_callback(HWAVEOUT, UINT, DWORD, DWORD, DWORD);
@@ -288,6 +291,8 @@ help() {
 	  NL "          -o file   Output raw data to the given file instead of /dev/dsp"
 	  NL "          -O        Output raw data to the standard output"
 	  NL "          -W        Output a WAV-format file instead of raw data"
+	  NL "          -w fmt    Compressed output: \"flac\" (lossless) or \"opus\""
+	  NL "                    (much smaller; needs 48kHz, selected automatically)"
 	  NL "          -m file   Read audio data from the given file and mix it with the"
 	  NL "                      generated binaural beats; may be "
 #ifdef OGG_DECODE
@@ -448,6 +453,14 @@ char *opt_o;			// File name to output to, or 0
 char *opt_m;			// File name to read mix data from, or 0
 char *opt_d= "/dev/dsp";	// Output device
 char *opt_a= "default";	// ALSA PCM device name (-A)
+char *opt_w;			// Compressed output format: "flac" or "opus", or 0
+FILE *enc_fp;			// Destination for compressed output (-w)
+
+#if defined(HAVE_FLAC) || defined(HAVE_OPUS)
+// enc_finish() takes the destination as an argument (encdec.c is included
+// above this point), but atexit only passes void*, so wrap it.
+static void enc_finish_wrapper() { enc_finish(enc_fp); }
+#endif
 
 #ifdef ALSA_AUDIO
 snd_pcm_t *alsa_pcm= 0;	// ALSA playback handle
@@ -716,11 +729,42 @@ main(int argc, char **argv) {
    // and consume a partially-built ring.
    correctPeriods();
 
+   // Compressed output (-w) behaves like -W in that it needs somewhere to go
+   // and a length, but writes its own container.
+   if (opt_w && opt_W)
+      error("Options -W and -w both select an output container; use one");
+   if (opt_w) {
+      if (!opt_o && !opt_O)
+	 error("Use -o or -O with the -w option");
+      if (0 != strcmp(opt_w, "flac") && 0 != strcmp(opt_w, "opus"))
+	 error("Unknown format for -w: %s (expected \"flac\" or \"opus\")", opt_w);
+#ifdef HAVE_OPUS
+      // Opus is defined for 48 kHz.  out_rate_def is 1 unless the user passed
+      // -r, so only override the default -- an explicit -r is honoured and
+      // enforced, since resampling would mean filtering.
+      if (0 == strcmp(opt_w, "opus") && out_rate_def && out_rate != 48000) {
+	 // Raising out_rate here, before the DSP runs, generates the same
+	 // waveform natively at 48 kHz: no resampling, so no filtering or
+	 // aliasing.
+	 out_rate= 48000;
+      }
+#endif
+      if (!opt_O) {
+	 enc_fp= fopen(opt_o, "wb");
+	 if (!enc_fp) error("Can't open %s for writing: %s", opt_o, strerror(errno));
+      }
+      else {
+	 enc_fp= stdout;
+      }
+      enc_set(0 == strcmp(opt_w, "flac") ? 1 : 2, enc_fp, out_rate, 2, 16);
+      atexit(enc_finish_wrapper);
+   }
+
    if (opt_W && !opt_o && !opt_O)
       error("Use -o or -O with the -W option");
-   if (opt_W && opt_L < 0 && !opt_E) {
-      fprintf(stderr, "*** The length has not been specified for the -W option; assuming 1 hour ***\n");
-      fprintf(stderr, "(Use -L or -E with the -W option to control the length of the WAV file)\n\n");
+   if ((opt_W || opt_w) && opt_L < 0 && !opt_E) {
+      fprintf(stderr, "*** The length has not been specified; assuming 1 hour ***\n");
+      fprintf(stderr, "(Use -L or -E to control the length of the output)\n\n");
       opt_L= 60*60*1000;
    }
    
@@ -855,6 +899,11 @@ scanOptions(int *acp, char ***avp) {
 	     break;
 	  case 'W': opt_W= 1;
 	     if (!fast_mult) fast_mult= 1; 		// Don't try to sync with real time
+	     break;
+	  case 'w':
+	     if (argc-- < 1) error("Expecting \"flac\" or \"opus\" after -w");
+	     opt_w= *argv++;
+	     if (!fast_mult) fast_mult= 1;
 	     break;
 	  case 'q': 
 	     opt_S= 1;
@@ -1398,8 +1447,9 @@ loop() {
     byte_count= out_bps * (S64)(t_per0(now, fast_tim1) * 0.001 * out_rate /
 				(fast ? fast_mult : 1));
 
-  // Do byte-swapping if bigendian and outputting to a file or stream
-  if ((opt_O || opt_o) &&
+  // Do byte-swapping if bigendian and outputting to a file or stream.
+  // Not for -w: the encoders read native-order shorts.
+  if ((opt_O || opt_o) && !opt_w &&
       out_mode == 1 && bigendian)
      out_mode= 2;
 
@@ -1617,6 +1667,18 @@ outChunk() {
 void 
 writeOut(char *buf, int siz) {
   int rv;
+
+#if defined(HAVE_FLAC) || defined(HAVE_OPUS)
+  // Compressed output (-w).  This is the same choke point the WAV and raw
+  // paths use, so the samples are identical; only the container differs.
+  if (opt_w) {
+     // out_bps is 4 for 16-bit stereo, so siz/4 is the frame count.  The
+     // final block may be shorter than a whole frame, which the encoders
+     // handle by flushing.
+     enc_write(enc_fp, (const short*)buf, siz / out_bps, 2);
+     return;
+  }
+#endif
 
 #ifdef WIN_AUDIO
   if (out_fd == -9999) {
@@ -1902,7 +1964,13 @@ setup_device(void) {
 
   // Handle output to files and pipes
   if (opt_O || opt_o) {
-    if (opt_O)
+    if (opt_w) {
+      // -w already opened the destination in main() and writes its own
+      // container; opening it again here would truncate the file.  Just point
+      // out_fd at it so the buffer arithmetic below matches the other paths.
+      out_fd= fileno(enc_fp);
+    }
+    else if (opt_O)
       out_fd= 1;		// stdout
     else {
       FILE *out;		// Need to create a stream to set binary mode for DOS
@@ -1920,7 +1988,7 @@ setup_device(void) {
     out_buf_lo &= 0xFFFF;
     tmp_buf= (int*)Alloc(out_blen * sizeof(int));
 
-    if (!opt_Q && !opt_W)		// Informational message for opt_W is written later
+    if (!opt_Q && !opt_W && !opt_w)	// ...and for -w, which writes its own header
        warn("Outputting %d-bit raw audio data at %d Hz with %d-sample blocks, %d ms per block",
 	    out_mode ? 16 : 8, out_rate, out_blen/2, out_buf_ms);
     return;
