@@ -192,6 +192,65 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# Codec mixing (-m).  Requires MP3_DECODE/OGG_DECODE to be compiled in, plus
+# ffmpeg to synthesise the test sources.
+if "$SBAGEN" -h 2>&1 | grep -q 'ogg/mp3/wav/raw'; then
+  echo "== codec mixing (-m) =="
+  if command -v ffmpeg >/dev/null 2>&1; then
+    ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=440:d=6" \
+      -codec:a libmp3lame -b:a 128k "$WORK/m.mp3" 2>/dev/null
+    ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=660:d=6" \
+      -codec:a libvorbis -q:a 4 "$WORK/m.ogg" 2>/dev/null
+    ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=440:d=6" -ac 2 \
+      "$WORK/m.wav" 2>/dev/null
+
+    # Render each and confirm audio came out.  Getting the beat through the
+    # decoder is not the point here -- just that the path works and does not
+    # crash or spin.
+    for src in m.mp3 m.ogg m.wav; do
+      printf 'ts: mix/50 200+10/0.3\nalloff: -\n0:00 ts\n0:10 alloff\n' > "$WORK/mix.sbg"
+      rm -f "$WORK/mixed.wav"
+      timeout 120 "$SBAGEN" -Q -S -W -m "$WORK/$src" -o "$WORK/mixed.wav" \
+        -F 500 -L 00:00:03 "$WORK/mix.sbg" >/dev/null 2>&1
+      if [ -s "$WORK/mixed.wav" ]; then
+        ok "-m $src produces audio"
+      else
+        no "-m $src produces audio" "no output"
+      fi
+    done
+
+    # A mono MP3 must come out balanced.  libmad leaves channel 1 untouched
+    # for mono input, so reading it blindly put noise in one ear.
+    ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=440:d=6" \
+      -ac 1 -codec:a libmp3lame -b:a 128k "$WORK/mono.mp3" 2>/dev/null
+    printf 'ts: mix/50 200+10/0.3\nalloff: -\n0:00 ts\n0:10 alloff\n' > "$WORK/mix.sbg"
+    rm -f "$WORK/mono_out.wav"
+    timeout 120 "$SBAGEN" -Q -S -W -m "$WORK/mono.mp3" -o "$WORK/mono_out.wav" \
+      -F 500 -L 00:00:03 "$WORK/mix.sbg" >/dev/null 2>&1
+    bal=$(python3 - "$WORK/mono_out.wav" <<'PY' 2>/dev/null
+import wave,struct,math,sys
+w=wave.open(sys.argv[1]); d=w.readframes(int(w.getframerate()*2))
+s=struct.unpack('<%dh'%(len(d)//2),d); L=s[0::2]; R=s[1::2]
+rms=lambda v:int(math.sqrt(sum(x*x for x in v)/max(1,len(v))))
+l,r=rms(L),rms(R)
+print("balanced" if l>0 and r>0 and (l>r*2 or r>l*2) else "ok" if l>0 and r>0 else "one-sided")
+PY
+)
+    if [ "$bal" = "balanced" ]; then
+      no "mono MP3 mixes to both channels" "one ear is silent: $bal"
+    elif [ "$bal" = "ok" ]; then
+      ok "mono MP3 mixes to both channels"
+    else
+      no "mono MP3 mixes to both channels" "$bal"
+    fi
+  else
+    sk "codec mixing" "ffmpeg not available to synthesise test sources"
+  fi
+else
+  sk "codec mixing" "built without MP3/OGG decode"
+fi
+
+# --------------------------------------------------------------------------
 # ALSA backend.  Skipped unless the binary was built with -DT_POSIX_ALSA.
 if "$SBAGEN" -h 2>&1 | grep -q '^ *-A dev'; then
   echo "== ALSA backend =="

@@ -9,8 +9,14 @@
 //	See comments lower down for OGG looper parameters.
 //	
 
-#include "libs/ivorbiscodec.h"
-#include "libs/ivorbisfile.h"
+// These deliberately come from libs64/, not libs/.  The headers bundled with
+// the 1.4.5 release describe a 2002-era layout in which ogg_sync_state and
+// ogg_stream_state are pointers, making OggVorbis_File 448 bytes.  Modern
+// Tremor embeds them by value, so the real struct is 864 bytes -- and any
+// build that mixes the old headers with a current library overflows the
+// caller's struct by 416 bytes the moment ov_open() touches it.
+#include "libs64/ivorbiscodec.h"
+#include "libs64/ivorbisfile.h"
 
 extern FILE *mix_in;
 extern int mix_cnt;

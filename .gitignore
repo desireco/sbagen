@@ -14,3 +14,8 @@ out/
 #                                `make test` compare our output against it, and
 #                                verify the defect tests actually fail on it.
 # Keeping it in version control is what makes those checks reproducible.
+# 64-bit codec archives built by tests/build-codecs.sh.  Large, and every
+# platform rebuilds its own.  The Makefile skips mixing if they are absent.
+dev/libs/linux-libmad64.a
+dev/libs/linux-libogg64.a
+dev/libs/linux-libvorbisidec64.a

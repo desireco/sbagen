@@ -1046,16 +1046,19 @@ raw_mix_in(int *dst, int dlen) {
    }
 
    // Now convert 16-bit little-endian input data into 20-bit native
-   // int values
+   // int values.  NB these scale by multiplication rather than <<: the
+   // samples are signed, and left-shifting a negative value is undefined
+   // behaviour (it happens to work on every two's-complement compiler, but
+   // UBSan rightly complains).
    if (bigendian) {
       char *rd= (char*)tmp;
       for (a= 0; a<rv; a++) {
-	 *dst++= ((rd[0]&255) + (rd[1]<<8)) << 4;
+	 *dst++= (((rd[0]&255) + (rd[1]<<8)) * 16);
 	 rd += 2;
       }
    } else {
-      for (a= 0; a<rv; a++) 
-	 *dst++= *tmp++ << 4;
+      for (a= 0; a<rv; a++)
+	 *dst++= *tmp++ * 16;
    }
 
    return rv;
@@ -1481,8 +1484,8 @@ outChunk() {
 
       // Do default mixing at 100% if no mix/* stuff is present
       if (!mix_flag) {
-	 tot1= mix1 << 12;
-	 tot2= mix2 << 12;
+	 tot1= mix1 * 4096;		// NB * not <<: see raw_mix_in()
+	 tot2= mix2 * 4096;
       } else {
 	 tot1= tot2= 0;
       }

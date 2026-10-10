@@ -68,7 +68,13 @@ mp3_read(int *dst, int dlen) {
 	 for (a= 0; a<cnt; a++) {
 	    int ii= synth.pcm.length - synth_extra--;
 	    val= synth.pcm.samples[0][ii]; *dst++= ROUND(val);
-	    val= synth.pcm.samples[1][ii]; *dst++= ROUND(val);
+	    // libmad only fills samples[1] for joint-stereo/dual-channel input.
+	    // For a mono stream it is left untouched, so reading it yields
+	    // whatever was in that buffer -- which put noise in one ear.  Mirror
+	    // channel 0 instead, which is what a mono source means anyway.
+	    val= (2 == synth.pcm.channels) ? synth.pcm.samples[1][ii]
+					  : synth.pcm.samples[0][ii];
+	    *dst++= ROUND(val);
 	    dlen -= 2;
 	 }
 	 continue;

@@ -1,20 +1,25 @@
 # SBaGen - build, replacing the 19 hand-written mk* scripts of the 1.4.5 tree.
 #
-#   make            build dev/sbagen-fixed (file output)
-#   make alsa       build with live ALSA output
-#   make asan       build with AddressSanitizer + UBSan
-#   make test       build, then run the regression harness
-#   make check      -O0/-O2/-O3 build matrix, to catch optimisation-level bugs
+#   make              build dev/sbagen-fixed (file output)
+#   make alsa         build with live ALSA output
+#   make asan         build with AddressSanitizer + UBSan
+#   make codecs       build the 64-bit libmad + Tremor needed for -m mixing
+#   make test         build, then run the regression harness
+#   make test-alsa    run the suite including live ALSA output
+#   make check        -O0..-Os build matrix, to catch optimisation-level bugs
 #   make clean
 #
-# Note: the 1.4.5 tree's scripts all defaulted to -m32 because libs/ only ships
-# 32-bit libmad/libvorbis archives, so MP3/OGG mixing cannot be built here
-# without rebuilding those.  See "codecs" below if you need them.
+# MP3/OGG mixing (-m) is off by default: the 1.4.5 tree only ships i686
+# archives, which cannot link into a 64-bit build.  Run 'make codecs' once to
+# build proper 64-bit ones.
 
 CC      ?= cc
 SRCDIR   = dev
 TARGET   = $(SRCDIR)/sbagen-fixed
 SRC      = $(SRCDIR)/sbagen.c
+# These are #include'd into sbagen.c rather than compiled separately, so they
+# must be listed as prerequisites or edits to them will not trigger a rebuild.
+INCLUDES = $(SRCDIR)/mp3dec.c $(SRCDIR)/oggdec.c
 ALSA_LIB ?= $(shell pkg-config --libs alsa 2>/dev/null)
 ALSA_CFLAGS ?= $(shell pkg-config --cflags alsa 2>/dev/null)
 HAVE_ALSA := $(shell pkg-config --exists alsa 2>/dev/null && echo yes)
@@ -29,29 +34,42 @@ LDLIBS  = -lm -lpthread
 # libs/linux-libvorbisidec.a.
 ARCH := $(shell uname -m)
 
+# An archive is usable only if its members are x86-64 ELF objects.  The
+# upstream 1.4.5 libs/ directory ships i686 archives, which cannot be linked
+# into a 64-bit build.
 define codec_ok
 $(shell [ -f $(1) ] && \
-  [ "$$(od -An -tx1 -N20 $(1) | tr -d ' \n' | grep -c '7f454c46')" -gt 0 ] && \
   ar t $(1) >/dev/null 2>&1 && \
   ar p $(1) $$(ar t $(1) | head -1) 2>/dev/null | od -An -tx1 -N20 | \
-    tr -d ' \n' | grep -qi '3e00' && echo yes)
+    tr -d ' \n' | grep -qi '7f454c4602' && echo yes)
 endef
 
 CODEC_LIBS =
-ifneq ($(call codec_ok,$(SRCDIR)/libs/linux-libmad.a),)
+CODEC_DEPS =
+ifneq ($(call codec_ok,$(SRCDIR)/libs/linux-libmad64.a),)
 CFLAGS_COMMON += -DMP3_DECODE
-CODEC_LIBS += $(SRCDIR)/libs/linux-libmad.a
+CODEC_LIBS += $(SRCDIR)/libs/linux-libmad64.a
+CODEC_DEPS += $(SRCDIR)/libs/mad.h
 endif
-ifneq ($(call codec_ok,$(SRCDIR)/libs/linux-libvorbisidec.a),)
+ifneq ($(call codec_ok,$(SRCDIR)/libs/linux-libvorbisidec64.a),)
 CFLAGS_COMMON += -DOGG_DECODE
-CODEC_LIBS += $(SRCDIR)/libs/linux-libvorbisidec.a
+CODEC_LIBS += $(SRCDIR)/libs/linux-libvorbisidec64.a
+CODEC_LIBS += $(SRCDIR)/libs/linux-libogg64.a
+CODEC_DEPS += $(SRCDIR)/libs64/ivorbiscodec.h $(SRCDIR)/libs64/ivorbisfile.h
 endif
 
-.PHONY: all alsa asan test test-alsa check clean distclean help
+# NB: do not substitute the system libvorbisfile here.  oggdec.c is written
+# against Ogg Vorbis *Tremor*, whose ov_read() takes 4 arguments; the
+# floating-point libvorbisfile that ships with distributions takes 7.  Linking
+# against it compiles but produces nothing but "Recoverable error in Ogg
+# stream" at runtime.  Tremor must be built from Xiph's sources (see the
+# `codecs` target).
+
+.PHONY: all alsa asan test test-alsa check clean distclean help codecs
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(SRC) $(INCLUDES) $(CODEC_DEPS)
 	$(CC) $(CFLAGS_COMMON) -O2 $(CFLAGS) $(SRC) -o $@ $(CODEC_LIBS) $(LDLIBS)
 
 # Live audio output via ALSA.  Falls back to a clear message if the ALSA
@@ -69,9 +87,9 @@ endif
 
 asan: $(SRCDIR)/sbagen-asan
 
-$(SRCDIR)/sbagen-asan: $(SRC)
+$(SRCDIR)/sbagen-asan: $(SRC) $(INCLUDES) $(CODEC_DEPS)
 	$(CC) $(CFLAGS_COMMON) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
-	  $(SRC) -o $@ $(LDLIBS)
+	  $(SRC) -o $@ $(CODEC_LIBS) $(LDLIBS)
 
 # Run the harness against both the fixed binary and, if present, the pristine
 # 1.4.5 build.  The pristine run is expected to FAIL the defect tests; that is
@@ -104,7 +122,7 @@ test-alsa: alsa
 check:
 	@for o in -O0 -O1 -O2 -O3 -Os; do \
 	   printf '  %-4s: ' $$o; \
-	   if $(CC) $(CFLAGS_COMMON) $$o $(SRC) -o /tmp/sbagen-check-$$o $(LDLIBS) 2>/tmp/err-$$o; then \
+	   if $(CC) $(CFLAGS_COMMON) $$o $(SRC) -o /tmp/sbagen-check-$$o $(CODEC_LIBS) $(LDLIBS) 2>/tmp/err-$$o; then \
 	     echo "links"; \
 	   else \
 	     echo "FAILED TO LINK"; cat /tmp/err-$$o; exit 1; \
@@ -120,3 +138,8 @@ distclean: clean
 
 help:
 	@sed -n '2,12p' $(firstword $(MAKEFILE_LIST))
+# Build the 64-bit libmad + Tremor + libogg static libraries needed for MP3/OGG
+# mixing.  See tests/build-codecs.sh for why these cannot come from the system.
+codecs:
+	@tests/build-codecs.sh
+	@$(MAKE) --no-print-directory clean
