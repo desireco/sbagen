@@ -34,10 +34,19 @@
 // Ogg container, for Opus.  Raw Opus packets have no framing at all -- a
 // decoder cannot tell where one packet ends and the next begins, so a raw
 // .opus file is unplayable.  libopusfile has no write API (it is a decoder
-// library), so the Ogg container is written directly here using libogg, which
-// is already linked for the Vorbis decoder.  Only the subset needed here is
-// used: serial header, two comment headers, then one audio page per packet.
+// library), so the Ogg container is written directly here.  Only the subset
+// needed is used: serial header, two comment headers, then one audio page
+// per packet.
+//
+// NB: this uses the *system* libogg rather than the copy built by
+// tests/build-codecs.sh for the Vorbis decoder.  The Opus path must work on a
+// clean checkout without running 'make codecs', and libogg is present on any
+// system that has libopus, so -w opus never depends on the decoder libraries.
+#ifdef HAVE_OGG_SYSTEM
+#include <ogg/ogg.h>
+#else
 #include "libs64/ogg.h"
+#endif
 
 #define OGG_HEAD_SERIAL   0x524F4747u	// 'ROGG' as a CRC seed
 

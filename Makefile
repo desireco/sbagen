@@ -43,6 +43,15 @@ CFLAGS_COMMON += -DHAVE_OPUS $(OPUS_CFLAGS)
 LDLIBS += $(OPUS_LIBS)
 endif
 
+# The Opus path writes its own Ogg container, so it needs libogg.  Use the
+# system library: 'make codecs' exists for the *decoder* side (libmad/Tremor),
+# and -w opus should not depend on having run it.
+OGG_SYS_LIBS := $(shell pkg-config --libs ogg 2>/dev/null)
+ifneq ($(OPUS_LIBS)$(OGG_SYS_LIBS),$(OPUS_LIBS))
+CFLAGS_COMMON += -DHAVE_OGG_SYSTEM
+LDLIBS += $(OGG_SYS_LIBS)
+endif
+
 # MP3/OGG mixing.  The 1.4.5 libs/ directory ships i686 archives, which cannot
 # be linked into a 64-bit build, so probe each archive for 64-bit ELF objects
 # rather than merely testing that the file exists.  To enable codecs, build
