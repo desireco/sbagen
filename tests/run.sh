@@ -36,7 +36,11 @@ sha() { sha256sum "$1" | cut -d' ' -f1; }
 
 # Wall-clock stamps appear in -D output for sequences that use NOW, and status
 # lines interleave with comment echoes, so normalise both.
-canon_d() { sed 's/[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/TT:TT:TT/g' | sort; }
+# NB: LC_ALL=C is required. 'sort' collation is locale-sensitive -- under
+# en_US.UTF-8 and C the lines of a -D dump order differently (':' is not
+# collated the same way), so an unpinned sort makes these goldens depend on the
+# machine's locale rather than on sbagen's output.
+canon_d() { sed 's/[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/TT:TT:TT/g' | LC_ALL=C sort; }
 
 # --------------------------------------------------------------------------
 echo "== golden: rendered audio =="

@@ -1,0 +1,86 @@
+name: build and test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The 1.4.5 sources failed to link at -O0 and -O3 because 'inline' on
+        # calcNow()/t_per*() emits no out-of-line definition under C99. Building
+        # at every level keeps that from coming back.
+        include:
+          - { name: 'default',    flags: '' }
+          - { name: '-O0',        flags: '-O0' }
+          - { name: '-O1',        flags: '-O1' }
+          - { name: '-O2',        flags: '-O2' }
+          - { name: '-O3',        flags: '-O3' }
+          - { name: '-Os',        flags: '-Os' }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Build
+        run: make CFLAGS="${{ matrix.flags }}"
+
+      - name: Regression suite
+        run: make test
+
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Build with sanitizers
+        run: make asan
+      - name: Sweep every bundled sequence under ASan/UBSan
+        run: |
+          set -e
+          fail=0
+          for f in dev/examples/*/*.sbg; do
+            out=$(ASAN_OPTIONS=detect_leaks=0 ./dev/sbagen-asan -D "$f" 2>&1 || true)
+            if echo "$out" | grep -qiE "runtime error|AddressSanitizer"; then
+              echo "ISSUE in $f"
+              echo "$out" | grep -iE "runtime error|AddressSanitizer" | head -3
+              fail=1
+            fi
+          done
+          [ $fail -eq 0 ] && echo "clean across all examples"
+          exit $fail
+      - name: Defect repros under ASan/UBSan
+        run: |
+          set -e
+          d=$(mktemp -d); trap 'rm -rf $d' EXIT
+          printf 'w: 200+10/0.2\nb: {\n+0:00 b\n}\n0:00 b\n' > $d/rec.sbg
+          printf -- '-i 200+10/0.2\nts2: 200+6/0.3\noff: -\n0:05 ts2\n0:10 off\n' > $d/imin.sbg
+          : > $d/empty.sbg
+          for t in "-D $d/rec.sbg" "-D $d/empty.sbg" "-D -p drop t300,1,1 99ls" \
+                   "-D -p drop t1,1,1 99ls" "-D $d/imin.sbg"; do
+            out=$(ASAN_OPTIONS=detect_leaks=0 ./dev/sbagen-asan $t 2>&1 || true)
+            if echo "$out" | grep -qiE "runtime error|AddressSanitizer"; then
+              echo "ISSUE: $t"; exit 1
+            fi
+          done
+          echo "all defect repros clean"
+
+  alsa:
+    name: ALSA backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y build-essential libasound2-dev
+      - name: Build with ALSA
+        run: make alsa
+      # Uses a file-backed ALSA PCM so the samples reaching the device can be
+      # compared byte-for-byte against the plain file output path. Both go
+      # through outChunk(), so they must match exactly.
+      - name: Regression suite with live ALSA output
+        run: make test-alsa
