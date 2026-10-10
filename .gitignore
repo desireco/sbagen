@@ -1,0 +1,16 @@
+# Build artifacts - all regenerable with `make` / `make alsa`
+dev/sbagen-fixed
+dev/sbagen-asan
+dev/sbagen-built
+dev/sbagen
+dev/*.o
+
+# Generated audio - regenerate with ./mksounds.sh
+out/
+
+# Note: sbagen-1.4.5/ is intentionally NOT ignored.  That tree is kept as the
+# pristine upstream reference, including its prebuilt binaries:
+#   sbagen-1.4.5/sbagen-built  - the regression oracle. tests/run.sh and
+#                                `make test` compare our output against it, and
+#                                verify the defect tests actually fail on it.
+# Keeping it in version control is what makes those checks reproducible.
