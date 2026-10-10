@@ -28,12 +28,14 @@ The upstream release is from 2011 and predates a lot of what changed since.
 | Build failure at `-O0` and `-O3` | `inline` on `calcNow()`/`t_per*()` emits no out-of-line definition under C99 |
 | Garbled parse of lines over 4096 characters | Lines were silently split, and the tail re-parsed as a bogus time |
 | Possible click/wrap at high amplitude | `int` overflow in the mix accumulator |
+| `-E` on a sequence with no duration rendered **forever** | a length of 0 is indistinguishable from "unlimited" to the output loop; a 38 GB wav appeared before it was caught |
 
-Two more bugs surfaced during the work itself: `if (opt_L)` was true when
+Three more bugs surfaced during the work itself: `if (opt_L)` was true when
 `opt_L == -1` ("not supplied"), which the old unconditional `-E` branch
-happened to mask; and the first attempt at the overflow fix silently zeroed the
+happened to mask; the first attempt at the overflow fix silently zeroed the
 left channel, because `-0x80000000` is an *unsigned* literal and forced an
-unsigned comparison.
+unsigned comparison; and the `-E` zero-duration case above, found while
+wiring `mksounds.sh` up to sequence files.
 
 ### Build system
 
@@ -166,7 +168,13 @@ old headers cannot quietly come back.
 ```
 ./mksounds.sh                                  # the standard set -> out/
 ./mksounds.sh mytrack '200+7/0.5' 00:30:00     # custom track and length
+./mksounds.sh aspirin dev/examples/contrib/ch-aspirin.sbg   # a whole sequence
+LENGTH=00:30:00 ./mksounds.sh f10 dev/examples/focus/focus-10-a.sbg
+                                               # cap a single-tone-set file
 ```
+
+Any bundled `.sbg` can be rendered this way; a sequence is rendered for its
+full stated duration, and `LENGTH=` overrides that.
 
 ## Layout
 

@@ -191,6 +191,20 @@ else
   no "bug7 over-long line is rejected" "rc=$rc out=$(echo "$out"|head -1|cut -c1-60)"
 fi
 
+# Bug 11: -E on a sequence whose only time-line is 00:00 computed a length of
+# 0, which outChunk's 'if (byte_count > 0)' treats as unlimited -- so it
+# rendered forever (a 38 GB wav before being caught).
+printf 'ts: 200+10/0.5\n0:00 ts\n' > "$WORK/notime.sbg"
+timeout 15 "$SBAGEN" -Q -S -E -W -o "$WORK/notime.wav" -F 500 "$WORK/notime.sbg" >/dev/null 2>&1
+rc=$?
+if [ $rc -eq 124 ]; then
+  no "bug11 -E on a zero-duration sequence does not render forever" "timed out still rendering"
+elif [ $rc -ne 0 ] && ! [ -s "$WORK/notime.wav" ]; then
+  ok "bug11 -E on a zero-duration sequence does not render forever"
+else
+  no "bug11 -E on a zero-duration sequence does not render forever" "rc=$rc size=$(stat -c%s "$WORK/notime.wav" 2>/dev/null)"
+fi
+
 # --------------------------------------------------------------------------
 # Codec mixing (-m).  Requires MP3_DECODE/OGG_DECODE to be compiled in, plus
 # ffmpeg to synthesise the test sources.

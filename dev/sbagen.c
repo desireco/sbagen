@@ -1443,9 +1443,17 @@ loop() {
   // would silently take this branch with a length of -1ms.
   if (opt_L >= 0)
     byte_count= out_bps * (S64)(opt_L * 0.001 * out_rate);
-  else if (opt_E)		// An explicit -L takes precedence over -E
+  else if (opt_E) {		// An explicit -L takes precedence over -E
     byte_count= out_bps * (S64)(t_per0(now, fast_tim1) * 0.001 * out_rate /
 				(fast ? fast_mult : 1));
+    // NB: byte_count == 0 must not fall through.  0 is indistinguishable
+    // from -1 ("unlimited") in outChunk's 'if (byte_count > 0)' test, so a
+    // sequence whose only time-line is 00:00 (or whose end equals its start)
+    // would render forever instead of not at all.
+    if (byte_count <= 0)
+      error("-E: the sequence has no duration (its last time-line equals its "
+	    "first); use -L to set a length");
+  }
 
   // Do byte-swapping if bigendian and outputting to a file or stream.
   // Not for -w: the encoders read native-order shorts.
