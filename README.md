@@ -125,6 +125,34 @@ and the device is drained via `atexit` because `loop()` never returns.
 
 Output through ALSA is byte-identical to the file output path.
 
+## Using as a library
+
+`make lib` builds `dev/libsbagen.a` — the same sources compiled with
+`-DSBAGEN_LIB`, which drops `main()` and exposes an in-process render API
+([`dev/sbagenlib.h`](dev/sbagenlib.h)):
+
+```c
+#include "sbagenlib.h"
+
+short *buf; int nframes;
+sbagen_render_immediate("200+10/0.5 pink/0.15", 44100, 5000, 3000, &buf, &nframes);
+// buf holds nframes*2 interleaved 16-bit LE samples: 5 s at 44.1 kHz.
+sbagen_free(buf);
+```
+
+The library renders through the CLI's own parse → `correctPeriods()` →
+`corrVal()`/`outChunk()` path, delivering to a memory buffer instead of a
+file — and the test suite proves the two stay in lockstep: for the same
+spec, rate, length and fade, `tests/unit_render` output and
+`sbagen -Q -S -W` output are **byte-identical**. If the library ever
+diverges from the CLI, the suite fails.
+
+Honest limitations: `error()` still exits the process (threading error
+returns through code that treats `exit` as its error handling is its own
+project); one render at a time; no mix input (`-m`) in-process. Reaching
+for the library made sense as the foundation for anything that wants
+SBaGen audio without shelling out — a GUI, a wasm build, MIDI control.
+
 ## Building
 
 Requires a C compiler, and `libasound2-dev` for the ALSA target
@@ -139,6 +167,34 @@ build the required 64-bit libraries -- see below.
 
 Compressed output (`-w`) needs `libFLAC` and `libopus`, both detected with
 `pkg-config`. Without them `-w` reports that no encoder is compiled in.
+
+## Using as a library
+
+`make lib` builds `dev/libsbagen.a` — the same sources compiled with
+`-DSBAGEN_LIB`, which drops `main()` and exposes an in-process render API
+([`dev/sbagenlib.h`](dev/sbagenlib.h)):
+
+```c
+#include "sbagenlib.h"
+
+short *buf; int nframes;
+sbagen_render_immediate("200+10/0.5 pink/0.15", 44100, 5000, 3000, &buf, &nframes);
+// buf holds nframes*2 interleaved 16-bit LE samples: 5 s at 44.1 kHz.
+sbagen_free(buf);
+```
+
+The library renders through the CLI's own parse → `correctPeriods()` →
+`corrVal()`/`outChunk()` path, delivering to a memory buffer instead of a
+file — and the test suite proves the two stay in lockstep: for the same
+spec, rate, length and fade, `tests/unit_render` output and
+`sbagen -Q -S -W` output are **byte-identical**. If the library ever
+diverges from the CLI, the suite fails.
+
+Honest limitations: `error()` still exits the process (threading error
+returns through code that treats `exit` as its error handling is its own
+project); one render at a time; no mix input (`-m`) in-process. Reaching
+for the library made sense as the foundation for anything that wants
+SBaGen audio without shelling out — a GUI, a wasm build, MIDI control.
 
 ## Building the codec libraries
 

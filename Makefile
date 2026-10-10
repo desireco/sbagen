@@ -1,6 +1,8 @@
 # SBaGen - build, replacing the 19 hand-written mk* scripts of the 1.4.5 tree.
 #
 #   make              build dev/sbagen-fixed (file output)
+#   make lib          build dev/libsbagen.a (in-process render API)
+#   make unit         build tests/unit_render (library render tool)
 #   make alsa         build with live ALSA output
 #   make asan         build with AddressSanitizer + UBSan
 #   make codecs       build the 64-bit libmad + Tremor needed for -m mixing
@@ -90,7 +92,7 @@ endif
 # stream" at runtime.  Tremor must be built from Xiph's sources (see the
 # `codecs` target).
 
-.PHONY: all alsa asan test test-alsa check clean distclean help codecs
+.PHONY: all alsa asan lib unit test test-alsa check clean distclean help codecs
 
 all: $(TARGET)
 
@@ -109,6 +111,20 @@ else
 	@echo "  Fedora:        dnf install alsa-lib-devel"
 	@exit 1
 endif
+
+# Library build: the same sources with -DSBAGEN_LIB, exposing an in-process
+# render API (dev/sbagenlib.h).  tests/run.sh proves the library's render is
+# byte-identical to the CLI's by comparing the two directly.
+lib: $(SRCDIR)/libsbagen.a
+
+$(SRCDIR)/libsbagen.a: $(SRC) $(INCLUDES) $(SRCDIR)/sbagenlib.h
+	$(CC) $(CFLAGS_COMMON) -DSBAGEN_LIB -O2 -c $(SRC) -o $(SRCDIR)/sbagen-lib.o
+	ar rcs $@ $(SRCDIR)/sbagen-lib.o
+
+unit: tests/unit_render
+
+tests/unit_render: tests/unit_render.c $(SRCDIR)/libsbagen.a $(SRCDIR)/sbagenlib.h
+	$(CC) -O2 -I$(SRCDIR) tests/unit_render.c $(SRCDIR)/libsbagen.a $(CODEC_LIBS) $(LDLIBS) -o $@
 
 asan: $(SRCDIR)/sbagen-asan
 
@@ -156,7 +172,8 @@ check:
 	 done
 
 clean:
-	rm -f $(TARGET) $(SRCDIR)/sbagen-asan
+	rm -f $(TARGET) $(SRCDIR)/sbagen-asan $(SRCDIR)/libsbagen.a \
+	      $(SRCDIR)/sbagen-lib.o tests/unit_render
 
 distclean: clean
 	rm -f /tmp/err-*

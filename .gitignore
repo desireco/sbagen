@@ -19,3 +19,6 @@ out/
 dev/libs/linux-libmad64.a
 dev/libs/linux-libogg64.a
 dev/libs/linux-libvorbisidec64.a
+dev/libsbagen.a
+dev/sbagen-lib.o
+tests/unit_render

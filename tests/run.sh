@@ -401,6 +401,52 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# Library render (make lib unit).  sbagenlib drives the same parse/resolve/
+# render code as the CLI, delivering samples to a memory buffer instead of a
+# file -- so its output must be byte-identical to the equivalent `sbagen -Q
+# -S -W` invocation.  If these two ever diverge, the library has split from
+# the CLI and one of them is wrong.
+if command -v cc >/dev/null 2>&1; then
+  if make lib >/dev/null 2>&1 && make unit >/dev/null 2>&1; then
+    echo "== library render (sbagenlib) =="
+    libcase() {
+      local name=$1 rate=$2 len_ms=$3 fade_ms=$4 spec=$5 len_hms=$6
+      rm -f "$WORK/lib.raw" "$WORK/cli.wav"
+      if ! timeout 60 tests/unit_render "$WORK/lib.raw" "$rate" "$len_ms" "$fade_ms" $spec >/dev/null 2>&1; then
+        no "lib render: $name" "unit_render failed"
+        return
+      fi
+      # NB: the CLI needs -r to render at the same rate as the library; the
+      # default is 44100 and the 48kHz case is otherwise apples-to-oranges.
+      local rateargs=()
+      [ "$rate" != 44100 ] && rateargs=(-r "$rate")
+      timeout 60 "$SBAGEN" -Q -S -W "${rateargs[@]}" -o "$WORK/cli.wav" -F "$fade_ms" -L "$len_hms" -i "$spec" >/dev/null 2>&1
+      if python3 - "$WORK/cli.wav" "$WORK/lib.raw" <<'PY'
+import sys
+d=open(sys.argv[1],'rb').read()
+cli=d[d.find(b'data')+8:]
+lib=open(sys.argv[2],'rb').read()
+sys.exit(0 if cli==lib and len(cli)>0 else 1)
+PY
+      then
+        ok "lib render: $name is byte-identical to the CLI"
+      else
+        no "lib render: $name is byte-identical to the CLI"
+      fi
+    }
+    libcase alpha        44100 5000 3000 '200+10/0.5'                00:00:05
+    libcase theta+pink   44100 8000 3000 '200+6/0.5 pink/0.15'       00:00:08
+    libcase spin+noise   44100 8000 3000 'spin:3+40/0.2 pink/0.2 200+8/0.3' 00:00:08
+    libcase bell         44100 8000 3000 'bell+440/0.3 200+10/0.4'   00:00:08
+    libcase 48kHz        48000 4000 2000 '200+10/0.5'                00:00:04
+  else
+    sk "library render" "make lib / make unit failed"
+  fi
+else
+  sk "library render" "no C compiler"
+fi
+
+# --------------------------------------------------------------------------
 echo "== sweep: all bundled examples parse =="
 sweep_ok=0; sweep_bad=0
 for f in "$ROOT"/dev/examples/*/*.sbg; do

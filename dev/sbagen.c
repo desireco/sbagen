@@ -244,6 +244,12 @@ void create_slide(int ac, char **av);
 #if defined(HAVE_FLAC) || defined(HAVE_OPUS)
 #include "encdec.c"
 #endif
+#ifdef SBAGEN_LIB
+// Public API decls + LIB_SINK_FD, needed before writeOut()/setup_device()
+// which reference the sink; engine.c (at the end) includes it again.
+#include "sbagenlib.h"
+void sbagen_sink_write(const char *buf, int siz);	// defined in engine.c
+#endif
 
 #ifdef WIN_AUDIO
 void CALLBACK win32_audio_callback(HWAVEOUT, UINT, DWORD, DWORD, DWORD);
@@ -438,6 +444,10 @@ int fast_tim1= -1;		// Last time mentioned in the sequence file (for -E option)
 int fast_mult= 0;		// 0 to sync to clock (adjusting as necessary), or else sync to
 				//  output rate, with the multiplier indicated
 S64 byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
+int loop_stop= 0;		// Set by outChunk() when the render is complete;
+				// loop() then returns instead of the exit(0)
+				// it used to call from mid-outChunk.  Lets a
+				// library build regain control (SBAGEN_LIB).
 int tty_erase;			// Chars to erase from current line (for ESC[K emulation)
 
 int opt_D;
@@ -692,6 +702,9 @@ int t_mid(int t0, int t1) {			// Midpoint of period from t0 to t1
 //	M A I N
 //
 
+// The library build (-DSBAGEN_LIB) supplies its own entry points and drives
+// the same parse/resolve/render code; see engine.c and sbagenlib.h.
+#ifndef SBAGEN_LIB
 int 
 main(int argc, char **argv) {
    short test= 0x1100;
@@ -839,6 +852,7 @@ main(int argc, char **argv) {
    loop();
    return 0;
 }
+#endif	// SBAGEN_LIB
 
 //
 //	Scan options.  Returns a flag indicating what is expected to
@@ -1473,6 +1487,9 @@ loop() {
     for (c= 0; c < cnt; c++) {
       corrVal(1);
       outChunk();
+      // outChunk sets loop_stop when the requested length is complete (this
+      // used to be an exit(0) from inside it) or when the mix input ends.
+      if (loop_stop) return;
       ms_inc= out_buf_ms + err;
       now_lo += out_buf_lo + err_lo;
       if (now_lo >= 0x10000) { ms_inc += now_lo >> 16; now_lo &= 0xFFFF; }
@@ -1524,7 +1541,9 @@ outChunk() {
       int rv= inbuf_read(tmp_buf, out_blen);
       if (rv == 0) {
 	 if (!opt_Q) warn("\nEnd of mix input audio stream");
-	 exit(0);
+	 byte_count= 0;
+	 loop_stop= 1;			// Stop rendering; see the -L handler
+	 return;
       }
       while (rv < out_blen) tmp_buf[rv++]= 0;
    }
@@ -1661,7 +1680,13 @@ outChunk() {
   if (byte_count > 0) {
     if (byte_count <= out_bsiz) {
       writeOut((char*)out_buf, byte_count);
-      exit(0);		// All done
+      // All done.  NB: this used to be exit(0) from the middle of outChunk,
+      // which is hostile to a library build (SBAGEN_LIB) that wants control
+      // back; setting loop_stop and unwinding through loop() is equivalent
+      // for the CLI -- main() returns 0 and the atexit hooks still run.
+      byte_count= 0;
+      loop_stop= 1;
+      return;
     }
     else {
       writeOut((char*)out_buf, out_bsiz);
@@ -1675,6 +1700,15 @@ outChunk() {
 void 
 writeOut(char *buf, int siz) {
   int rv;
+
+#ifdef SBAGEN_LIB
+  // Library memory sink: the caller's buffer, not a file or device.  The
+  // sentinel fd is set by sbagen_render_immediate() before loop() runs.
+  if (out_fd == LIB_SINK_FD) {
+     sbagen_sink_write(buf, siz);
+     return;
+  }
+#endif
 
 #if defined(HAVE_FLAC) || defined(HAVE_OPUS)
   // Compressed output (-w).  This is the same choke point the WAV and raw
@@ -1969,6 +2003,23 @@ corrVal(int running) {
 
 void 
 setup_device(void) {
+
+#ifdef SBAGEN_LIB
+  // Library memory sink: same buffer arithmetic as the file branch, but no
+  // fd is opened -- writeOut() diverts to the caller's buffer.
+  if (out_fd == LIB_SINK_FD) {
+    out_blen= out_rate * 2 / out_prate;		// 10 fragments a second by default
+    while (out_blen & (out_blen-1)) out_blen &= out_blen-1;		// Make power of two
+    out_bsiz= out_blen * (out_mode ? 2 : 1);
+    out_bps= out_mode ? 4 : 2;
+    out_buf= (short*)Alloc(out_blen * sizeof(short));
+    out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
+    out_buf_ms= out_buf_lo >> 16;
+    out_buf_lo &= 0xFFFF;
+    tmp_buf= (int*)Alloc(out_blen * sizeof(int));
+    return;
+  }
+#endif
 
   // Handle output to files and pipes
   if (opt_O || opt_o) {
@@ -3511,5 +3562,8 @@ create_slide(int ac, char **av) {
    // correctPeriods() is called by main() once parsing is complete
 }   
 
+#ifdef SBAGEN_LIB
+#include "engine.c"
+#endif
 
 // END //

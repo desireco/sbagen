@@ -73,8 +73,6 @@ static int ogg_os_ready= 0;
 static int ogg_headers_done= 0;
 static int ogg_eos= 0;
 static ogg_int64_t ogg_granule;			// samples encoded so far
-static unsigned char *ogg_pkt;
-static int ogg_pkt_len;
 #endif
 
 // ---------------------------------------------------------------------------
@@ -125,7 +123,13 @@ ogg_write_headers(FILE *fp) {
   memcpy(head, "OpusHead", 8);
   head[8] = 1;				// version
   head[9] = 2;				// channel count
-  head[10]= 0; head[11]= 312;		// pre-skip, little-endian
+  // Pre-skip, little-endian 16-bit: libopus delays output by 312 samples, so
+  // the decoder must discard exactly that many to recover the input
+  // timeline.  NB this was once written as head[10]=0, head[11]=312, which
+  // truncates 312 to 56 in the high byte and yields a pre-skip of 14336 --
+  // silently dropping the first 293ms of every file.
+  head[10]= 312 & 0xff;
+  head[11]= (312 >> 8) & 0xff;
   head[12]= (unsigned char)(OPUS_MAX_RATE & 0xff);
   head[13]= (unsigned char)((OPUS_MAX_RATE >> 8) & 0xff);
   head[14]= (unsigned char)((OPUS_MAX_RATE >> 16) & 0xff);
