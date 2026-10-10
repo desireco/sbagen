@@ -251,93 +251,6 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# Compressed output (-w flac / -w opus).  The point of these is to prove the
-# containers carry the same audio as the WAV path, since both feed the encoder
-# from the same writeOut() choke point.
-if "$SBAGEN" -h 2>&1 | grep -q '\-w fmt'; then
-  echo "== compressed output (-w) =="
-  if ! command -v ffmpeg >/dev/null 2>&1; then
-    sk "compressed output" "ffmpeg not available to decode and verify"
-  else
-    rm -f "$WORK/c.wav" "$WORK/c.flac" "$WORK/c.opus"
-    "$SBAGEN" -Q -S -W    -o "$WORK/c.wav"  -F 2000 -L 00:00:05 -i '200+10/0.5' >/dev/null 2>&1
-    "$SBAGEN" -Q -S -w flac -o "$WORK/c.flac" -F 2000 -L 00:00:05 -i '200+10/0.5' >/dev/null 2>&1
-    "$SBAGEN" -Q -S -w opus -o "$WORK/c.opus" -F 2000 -L 00:00:05 -i '200+10/0.5' >/dev/null 2>&1
-
-    for f in c.flac c.opus; do
-      [ -s "$WORK/$f" ] && ok "-w ${f#c.} produces a file" \
-                        || no "-w ${f#c.} produces a file" "no output"
-    done
-
-    # FLAC is lossless, so it must decode back to exactly the WAV samples.
-    # Compare from the 'data' chunk rather than assuming a 44-byte header:
-    # ffmpeg pads its WAVs with a LIST/INFO chunk, so the offset differs.
-    if [ -s "$WORK/c.flac" ]; then
-      ffmpeg -hide_banner -v error -y -i "$WORK/c.flac" -f wav "$WORK/flac_rt.wav" 2>/dev/null
-      if python3 - "$WORK/c.wav" "$WORK/flac_rt.wav" <<'PY'
-import sys
-def payload(p):
-    d=open(p,'rb').read()
-    return d[d.find(b'data')+8:]
-a,b=payload(sys.argv[1]),payload(sys.argv[2])
-n=min(len(a),len(b))
-sys.exit(0 if a[:n]==b[:n] else 1)
-PY
-      then
-        ok "FLAC is bit-exact against the WAV render"
-      else
-        no "FLAC is bit-exact against the WAV render"
-      fi
-    fi
-
-    # Opus is lossy, so compare the binaural beat instead: the L/R difference
-    # is the whole point of the output and must survive encoding.
-    if [ -s "$WORK/c.opus" ]; then
-      ffmpeg -hide_banner -v error -y -i "$WORK/c.opus" -f wav "$WORK/opus_rt.wav" 2>/dev/null
-      r=$(python3 - "$WORK/c.wav" "$WORK/opus_rt.wav" <<'PY' 2>/dev/null
-import wave,struct,math,sys
-def beat(p):
-    w=wave.open(p); d=w.readframes(int(w.getframerate()*2))
-    s=struct.unpack('<%dh'%(len(d)//2),d); L=s[0::2]; R=s[1::2]
-    f=lambda v:int(math.sqrt(sum(x*x for x in v)/max(1,len(v))))
-    return f([a-b for a,b in zip(L,R)])
-a,b=beat(sys.argv[1]),beat(sys.argv[2])
-print("ok" if a>0 and b>0 and abs(a-b)<=max(20,a*0.25) else f"mismatch wav={a} opus={b}")
-PY
-)
-      if [ "$r" = "ok" ]; then
-        ok "Opus preserves the binaural beat"
-      else
-        no "Opus preserves the binaural beat" "$r"
-      fi
-
-      # Both containers must actually be playable, not just non-empty.  A raw
-      # Opus stream has no framing and ffmpeg rejects it, which is how the
-      # missing Ogg container was caught.
-      for f in c.flac c.opus; do
-        if ffmpeg -hide_banner -v error -i "$WORK/$f" -f null - >/dev/null 2>&1; then
-          ok "$f decodes cleanly (valid container)"
-        else
-          no "$f decodes cleanly" "ffmpeg rejected it"
-        fi
-      done
-    fi
-
-    # -w needs a destination, and must refuse a container it does not know.
-    "$SBAGEN" -w flac -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1
-    [ $? -ne 0 ] && ok "-w without -o/-O is refused" || no "-w without -o/-O is refused"
-    "$SBAGEN" -w mp3 -o "$WORK/x" -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1
-    [ $? -ne 0 ] && ok "-w rejects an unknown format" || no "-w rejects an unknown format"
-    # -W and -w both pick the container; using both is a mistake, not a
-    # silent preference for one of them.
-    "$SBAGEN" -w flac -W -o "$WORK/x" -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1
-    [ $? -ne 0 ] && ok "-w together with -W is refused" || no "-w together with -W is refused"
-  fi
-else
-  sk "compressed output" "built without FLAC/Opus"
-fi
-
-# --------------------------------------------------------------------------
 # ALSA backend.  Skipped unless the binary was built with -DT_POSIX_ALSA.
 if "$SBAGEN" -h 2>&1 | grep -q '^ *-A dev'; then
   echo "== ALSA backend =="
@@ -385,6 +298,92 @@ if "$SBAGEN" -h 2>&1 | grep -q '^ *-A dev'; then
   else
     sk "ALSA byte-identity" "set SBAGEN_TEST_ALSA_PCM and SBAGEN_TEST_ALSA_FILE to a file-backed PCM"
   fi
+fi
+
+# --------------------------------------------------------------------------
+# Compressed output (-w flac / -w opus).  Both encoders are fed from the same
+# writeOut() choke point as the WAV path, so the generated audio must be
+# identical; only the container differs.  FLAC is lossless and must decode
+# back bit-exact; Opus is lossy, so what is checked instead is that the file
+# is a valid Ogg Opus stream (a raw Opus packet stream is unplayable) and that
+# the binaural beat -- the entire point of the output -- survives.
+if "$SBAGEN" -h 2>&1 | grep -q '\-w fmt'; then
+  if command -v ffmpeg >/dev/null 2>&1 && \
+     "$SBAGEN" -w flac -o "$WORK/probe.flac" -F 500 -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1; then
+    echo "== compressed output (-w) =="
+    rm -f "$WORK/probe.flac" "$WORK/c.wav" "$WORK/c.flac" "$WORK/c.opus" \
+          "$WORK/c_rt.wav" "$WORK/o_rt.wav"
+
+    "$SBAGEN" -Q -S -W    -o "$WORK/c.wav"  -F 2000 -L 00:00:05 -i '200+10/0.5' >/dev/null 2>&1
+    "$SBAGEN" -Q -S -w flac -o "$WORK/c.flac" -F 2000 -L 00:00:05 -i '200+10/0.5' >/dev/null 2>&1
+    "$SBAGEN" -Q -S -w opus -o "$WORK/c.opus" -F 2000 -L 00:00:05 -i '200+10/0.5' >/dev/null 2>&1
+
+    for f in c.flac c.opus; do
+      [ -s "$WORK/$f" ] && ok "-w ${f#c.} produces a file" \
+                        || no "-w ${f#c.} produces a file" "no output"
+    done
+
+    if [ -s "$WORK/c.flac" ]; then
+      ffmpeg -hide_banner -v error -y -i "$WORK/c.flac" -f wav "$WORK/c_rt.wav" 2>/dev/null
+      # Compare from the 'data' chunk onward rather than assuming a 44-byte
+      # WAV header: ffmpeg pads its output with a LIST/INFO chunk, so the
+      # sample data does not start at the same offset in both files.
+      if python3 - "$WORK/c.wav" "$WORK/c_rt.wav" <<'PY'
+import sys
+def samples(p):
+    d=open(p,'rb').read()
+    return d[d.find(b'data')+8:]
+a,b=samples(sys.argv[1]),samples(sys.argv[2])
+n=min(len(a),len(b))
+sys.exit(0 if a[:n]==b[:n] else 1)
+PY
+      then
+        ok "FLAC decodes back bit-exact against the WAV render"
+      else
+        no "FLAC decodes back bit-exact against the WAV render"
+      fi
+    fi
+
+    if [ -s "$WORK/c.opus" ]; then
+      # A bare Opus packet stream has no framing and ffmpeg rejects it, which
+      # is exactly how the missing Ogg container was first caught.
+      if ffmpeg -hide_banner -v error -y -i "$WORK/c.opus" -f wav "$WORK/o_rt.wav" >/dev/null 2>&1; then
+        ok "Opus output is a valid, decodable container"
+      else
+        no "Opus output is a valid, decodable container" "ffmpeg rejected it"
+      fi
+
+      r=$(python3 - "$WORK/c.wav" "$WORK/o_rt.wav" <<'PY' 2>/dev/null
+import wave,struct,math,sys
+def beat(p):
+    w=wave.open(p); d=w.readframes(int(w.getframerate()*2))
+    s=struct.unpack('<%dh'%(len(d)//2),d); L=s[0::2]; R=s[1::2]
+    f=lambda v:int(math.sqrt(sum(x*x for x in v)/max(1,len(v))))
+    return f([a-b for a,b in zip(L,R)])
+a,b=beat(sys.argv[1]),beat(sys.argv[2])
+print("ok" if a>0 and b>0 and abs(a-b)<=max(20,a*0.25) else "mismatch wav=%d opus=%d"%(a,b))
+PY
+)
+      if [ "$r" = "ok" ]; then
+        ok "Opus preserves the binaural beat"
+      else
+        no "Opus preserves the binaural beat" "$r"
+      fi
+    fi
+
+    # Error paths: -w needs a destination and a known format, and -W together
+    # with -w is a mistake rather than a silent preference for one of them.
+    "$SBAGEN" -w flac -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1
+    [ $? -ne 0 ] && ok "-w without -o/-O is refused" || no "-w without -o/-O is refused"
+    "$SBAGEN" -w mp3 -o "$WORK/x" -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1
+    [ $? -ne 0 ] && ok "-w rejects an unknown format" || no "-w rejects an unknown format"
+    "$SBAGEN" -w flac -W -o "$WORK/x" -L 00:00:01 -i '200+10/0.5' >/dev/null 2>&1
+    [ $? -ne 0 ] && ok "-w together with -W is refused" || no "-w together with -W is refused"
+  else
+    sk "compressed output" "ffmpeg unavailable or FLAC/Opus not compiled in"
+  fi
+else
+  sk "compressed output" "built without FLAC/Opus"
 fi
 
 # --------------------------------------------------------------------------

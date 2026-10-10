@@ -37,12 +37,26 @@ OGG_VER=1.3.5
 
 mkdir -p "$WORK" "$LIBS64"
 
-fetch() { curl -sSL --max-time 120 -o "$2" "$1"; }
+# Download $1 to $2, trying each URL in turn.  Single-source downloads turn a
+# mirror's bad day into a build failure, so every fetch has a fallback.
+fetch() {
+  local out=$1; shift
+  local url
+  for url in "$@"; do
+    if curl -sSfL --max-time 120 -o "$out" "$url" 2>/dev/null && [ -s "$out" ]; then
+      return 0
+    fi
+  done
+  echo "ERROR: could not download any of:" >&2
+  for url in "$@"; do echo "  $url" >&2; done
+  return 1
+}
 
 echo "==> libmad $LIBMAD_VER"
 if [ ! -d "$WORK/libmad-$LIBMAD_VER" ]; then
-  fetch "https://sourceforge.net/projects/mad/files/libmad/$LIBMAD_VER/libmad-$LIBMAD_VER.tar.gz/download" \
-        "$WORK/libmad.tar.gz"
+  fetch "$WORK/libmad.tar.gz" \
+    "https://sourceforge.net/projects/mad/files/libmad/$LIBMAD_VER/libmad-$LIBMAD_VER.tar.gz/download" \
+    "https://downloads.sourceforge.net/project/mad/libmad/$LIBMAD_VER/libmad-$LIBMAD_VER.tar.gz"
   tar -C "$WORK" -xzf "$WORK/libmad.tar.gz"
 fi
 cd "$WORK/libmad-$LIBMAD_VER"
@@ -60,8 +74,10 @@ echo "    -> dev/libs/linux-libmad64.a"
 
 echo "==> libogg $OGG_VER (Tremor's bitstream layer)"
 if [ ! -d "$WORK/libogg-$OGG_VER" ]; then
-  fetch "https://downloads.xiph.org/releases/ogg/libogg-$OGG_VER.tar.gz" \
-        "$WORK/libogg.tar.gz"
+  fetch "$WORK/libogg.tar.gz" \
+    "https://downloads.xiph.org/releases/ogg/libogg-$OGG_VER.tar.gz" \
+    "https://ftp.osuosl.org/pub/xiph/releases/ogg/libogg-$OGG_VER.tar.gz" \
+    "https://gitlab.xiph.org/xiph/libogg/-/archive/v$OGG_VER/libogg-v$OGG_VER.tar.gz"
   tar -C "$WORK" -xzf "$WORK/libogg.tar.gz"
 fi
 cd "$WORK/libogg-$OGG_VER"
@@ -75,7 +91,9 @@ echo "    -> dev/libs/linux-libogg64.a"
 
 echo "==> Tremor"
 if [ ! -d "$WORK/tremor-master" ]; then
-  fetch "$TREMOR_URL" "$WORK/tremor.tar.gz"
+  fetch "$WORK/tremor.tar.gz" \
+    "$TREMOR_URL" \
+    "https://gitlab.xiph.org/xiph/tremor/-/archive/main/tremor-main.tar.gz"
   tar -C "$WORK" -xzf "$WORK/tremor.tar.gz"
 fi
 cd "$WORK/tremor-master"
