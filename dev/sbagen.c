@@ -466,9 +466,10 @@ char *opt_a= "default";	// ALSA PCM device name (-A)
 char *opt_w;			// Compressed output format: "flac" or "opus", or 0
 FILE *enc_fp;			// Destination for compressed output (-w)
 
-#if defined(HAVE_FLAC) || defined(HAVE_OPUS)
+#if (defined(HAVE_FLAC) || defined(HAVE_OPUS)) && !defined(SBAGEN_LIB)
 // enc_finish() takes the destination as an argument (encdec.c is included
-// above this point), but atexit only passes void*, so wrap it.
+// above this point), but atexit only passes void*, so wrap it.  CLI builds
+// only -- the library flushes explicitly instead of via atexit.
 static void enc_finish_wrapper() { enc_finish(enc_fp); }
 #endif
 

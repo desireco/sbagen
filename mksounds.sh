@@ -8,6 +8,14 @@
 #   ./mksounds.sh focus10 dev/examples/focus/focus-10-a.sbg
 #                                  # render a whole .sbg sequence file
 #
+# Mixing a bed underneath (music, rain, brown noise...):
+#   MIX=sequences/brown-noise.ogg ./mksounds.sh focus-40-24-brown \
+#        dev/examples/focus/focus-24-b.sbg
+#   MIX=bed.mp3 ./mksounds.sh theta-mix '200+6/0.4' 00:30:00
+#
+# The bed is mixed at 100% (as `-m file` does) under the tones; attenuate the
+# bed file itself beforehand if you want it quieter relative to the tones.
+#
 # The length argument applies to immediate mode only; a sequence file is
 # rendered for its full stated duration unless -E/--end is not what you want
 # (set LENGTH= to override, e.g. LENGTH=01:00:00).
@@ -32,20 +40,22 @@ mkdir -p "$OUT"
 render() {
   local name=$1 source=$2 len=${3:-}
   local wav="$OUT/$name.wav" mp3="$OUT/$name.mp3"
+  local mixargs=()
+  [ -n "${MIX:-}" ] && mixargs=(-m "$MIX")
 
   if [ -f "$source" ]; then
     # A sequence file: rendered for its own duration (-E = up to the end),
     # unless LENGTH overrides it.
-    local seqargs=(-Q -S -W -o "$wav" -F "$FADE" -E "$source")
+    local seqargs=(-Q -S -W -o "$wav" -F "$FADE" -E "${mixargs[@]}" "$source")
     if [ -n "$LENGTH" ]; then
-      seqargs=(-Q -S -W -o "$wav" -F "$FADE" -L "$LENGTH" "$source")
+      seqargs=(-Q -S -W -o "$wav" -F "$FADE" -L "$LENGTH" "${mixargs[@]}" "$source")
     fi
     "$SBAGEN" "${seqargs[@]}"
-    local desc="$source"
+    local desc="$source${MIX:+ + $MIX}"
   else
-    local immargs=(-Q -S -W -o "$wav" -F "$FADE" -L "${len:-00:02:00}" -i "$source")
+    local immargs=(-Q -S -W -o "$wav" -F "$FADE" -L "${len:-00:02:00}" "${mixargs[@]}" -i "$source")
     "$SBAGEN" "${immargs[@]}"
-    local desc="$source${len:+ (len $len)}"
+    local desc="$source${len:+ (len $len)}${MIX:+ + $MIX}"
   fi
 
   ffmpeg -hide_banner -loglevel error -y -i "$wav" \
