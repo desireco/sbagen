@@ -34,74 +34,111 @@
   a:hover { text-decoration: underline; }
   .container { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
 
+  /* ---------- Header ---------- */
   header.nav {
     position: sticky; top: 0; z-index: 10;
     background: rgba(24, 19, 16, 0.85);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
   }
-  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
   .brand { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; color: var(--text); }
   .brand:hover { text-decoration: none; color: var(--accent2); }
-  .nav nav { display: flex; gap: 22px; flex-wrap: wrap; }
-  .nav nav a { color: var(--muted); font-size: 0.92rem; }
-  .nav nav a:hover { color: var(--text); text-decoration: none; }
 
-  .hero { position: relative; padding: 88px 0 40px; overflow: hidden; }
+  .nav-links { display: flex; gap: 4px; align-items: center; position: relative; }
+  .nav-links a {
+    color: var(--muted); font-size: 0.88rem; padding: 6px 10px; border-radius: 6px;
+  }
+  .nav-links a:hover { color: var(--text); text-decoration: none; background: rgba(255,255,255,0.04); }
+  .nav-links a.active { color: var(--accent2); }
+
+  .menu-btn {
+    display: none; background: none; border: 1px solid var(--border); border-radius: 7px;
+    color: var(--muted); font: 600 0.82rem var(--mono); padding: 6px 10px; cursor: pointer;
+  }
+  .menu-btn:hover { color: var(--text); border-color: var(--accent2); }
+  .nav-drawer {
+    display: none; position: absolute; top: 100%; right: 0; margin-top: 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 6px; min-width: 180px; box-shadow: 0 18px 44px -20px rgba(0,0,0,0.7);
+  }
+  .nav-drawer.open { display: block; }
+  .nav-drawer a { display: block; padding: 9px 12px; border-radius: 7px; color: var(--muted); font-size: 0.9rem; }
+  .nav-drawer a:hover { background: rgba(255,255,255,0.04); color: var(--text); text-decoration: none; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 72px 0 150px; overflow: hidden; }
   .kicker {
-    font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--accent2); margin-bottom: 18px;
+    font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent2); margin-bottom: 16px;
   }
   h1 { font-size: clamp(2.6rem, 6vw, 3.8rem); line-height: 1.12; letter-spacing: -0.02em; }
   h1 .grad {
     background: linear-gradient(90deg, var(--accent), var(--accent2));
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .lede { max-width: 680px; margin: 22px 0 30px; font-size: 1.15rem; color: var(--muted); }
+  .lede { max-width: 680px; margin: 20px 0 26px; font-size: 1.13rem; color: var(--muted); }
   .lede code { font-family: var(--mono); font-size: 0.9em; color: var(--text); }
-  .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 40px; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 34px; }
   .btn {
-    display: inline-block; padding: 11px 22px; border-radius: 8px;
-    font-weight: 600; font-size: 0.95rem; border: 1px solid var(--border);
+    display: inline-block; padding: 10px 20px; border-radius: 8px;
+    font-weight: 600; font-size: 0.93rem; border: 1px solid var(--border);
     color: var(--text); transition: border-color .15s, transform .15s;
   }
   .btn:hover { text-decoration: none; border-color: var(--accent2); transform: translateY(-1px); }
-  .btn.primary {
-    background: linear-gradient(90deg, #e3a72e, #c9851d);
-    border: none; color: #241a09;
-  }
+  .btn.primary { background: linear-gradient(90deg, #e3a72e, #c9851d); border: none; color: #241a09; }
   .term {
-    font-family: var(--mono); font-size: 0.85rem;
+    font-family: var(--mono); font-size: 0.83rem;
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
     padding: 14px 18px; max-width: 720px; overflow-x: auto; color: var(--muted);
+    position: relative;
   }
   .term .p { color: var(--accent2); }
   .term .o { color: var(--text); }
-  .wave { position: absolute; inset: auto 0 0; height: 120px; pointer-events: none; }
+  .wave { position: absolute; inset: auto 0 0; height: 110px; pointer-events: none; }
   .wave svg { width: 100%; height: 100%; display: block; }
   .wave .fast { animation: pulse 4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.55; } }
-  @media (prefers-reduced-motion: reduce) { .wave .fast { animation: none; } html { scroll-behavior: auto; } }
-  @media (max-width: 640px) {
-    .nav-inner { flex-direction: column; height: auto; padding: 12px 0; gap: 8px; }
-    .nav nav { justify-content: center; gap: 14px; }
-    .wave { display: none; }
-    .hero { padding-top: 56px; }
-  }
 
-  section { padding: 72px 0 12px; }
-  h2 { font-size: 1.7rem; letter-spacing: -0.01em; margin-bottom: 10px; }
-  .section-lede { color: var(--muted); max-width: 680px; margin-bottom: 34px; }
+  /* ---------- Sections ---------- */
+  section { padding: 60px 0 8px; scroll-margin-top: 76px; }
+  h2 { font-size: 1.65rem; letter-spacing: -0.01em; margin-bottom: 10px; }
+  .section-lede { color: var(--muted); max-width: 680px; margin-bottom: 30px; }
   .section-lede code { font-family: var(--mono); color: var(--text); font-size: 0.9em; }
-  .use h3 { margin: 30px 0 8px; font-size: 1.15rem; }
+  .use h3 { margin: 28px 0 8px; font-size: 1.12rem; }
+  .use h3:first-of-type { margin-top: 0; }
+  .note { color: var(--muted); font-size: 0.9rem; margin-bottom: 10px; }
+  .note code { font-family: var(--mono); color: var(--text); font-size: 0.9em; }
 
+  /* ---------- Animated line divider ---------- */
+  .rule { display: flex; flex-direction: column; gap: 7px; margin-bottom: 26px; }
+  .rule span {
+    display: block; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2) 55%, rgba(227, 167, 46, 0));
+    transform: scaleX(0); transform-origin: left center;
+    will-change: transform;
+  }
+  .rule span:nth-child(1) { width: 100%; }
+  .rule span:nth-child(2) { width: 64%; animation-delay: .14s; }
+  .rule span:nth-child(3) { width: 36%; animation-delay: .28s; }
+  .rule.in span { animation: ruleDraw .95s cubic-bezier(.22, .61, .36, 1) forwards; }
+  @keyframes ruleDraw { to { transform: scaleX(1); } }
+
+  /* ---------- Decision aid ---------- */
+  .decision { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 30px; }
+  .decision .d { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 0.83rem; line-height: 1.5; }
+  .decision .d .q { color: var(--muted); display: block; margin-bottom: 2px; }
+  .decision .d .a { color: var(--accent2); font-weight: 600; }
+
+  /* ---------- Cards ---------- */
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     padding: 24px; display: flex; flex-direction: column; gap: 10px;
   }
   .card.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 12px 40px -18px rgba(227, 167, 46, 0.4); }
-  .card .era { font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent2); }
+  .card .era { font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent2); }
   .card.now .era { color: var(--accent); }
   .card h3 { font-size: 1.2rem; }
   .card .by { color: var(--muted); font-size: 0.88rem; margin-top: -6px; }
@@ -109,7 +146,6 @@
   .card p strong { color: var(--text); font-weight: 600; }
   .card .links { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.9rem; }
   .card.wide { grid-column: 1 / -1; }
-  .card.wide p { max-width: 760px; }
   .alts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 14px; }
   .alt { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
   .alt h3 { font-size: 1rem; margin-bottom: 2px; }
@@ -117,21 +153,33 @@
   .alt .by { color: var(--muted); font-size: 0.8rem; margin-top: -4px; }
   .alt p { color: var(--muted); font-size: 0.85rem; flex: 1; }
   .alt .lk { margin-top: 8px; font-size: 0.85rem; display: flex; gap: 12px; flex-wrap: wrap; }
-  .alt pre { font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 4px 0 0; overflow-x: auto; }
+  .alt pre { position: relative; font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 4px 0 0; overflow-x: auto; }
   .badge {
     align-self: flex-start; font-size: 0.72rem; font-family: var(--mono);
     padding: 3px 9px; border-radius: 99px; border: 1px solid var(--accent); color: var(--accent);
   }
 
+  /* ---------- Code blocks ---------- */
   pre.block {
-    font-family: var(--mono); font-size: 0.88rem; line-height: 1.7;
+    font-family: var(--mono); font-size: 0.86rem; line-height: 1.7;
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px 22px; overflow-x: auto; margin: 14px 0 22px;
+    padding: 20px 22px; overflow-x: auto; margin: 12px 0 20px; position: relative;
   }
   pre.block .c { color: #8a7a5f; }
   pre.block .k { color: var(--accent2); }
-  .note { color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
+  .copy-btn {
+    position: absolute; top: 10px; right: 10px;
+    font: 600 0.7rem/1 var(--mono); color: var(--muted);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 9px; cursor: pointer; opacity: 0;
+    transition: opacity .15s, color .15s, border-color .15s;
+  }
+  .copy-btn:hover { color: var(--accent2); border-color: var(--accent2); }
+  .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+  pre:hover .copy-btn, pre:focus-within .copy-btn { opacity: 1; }
+  @media (hover: none) { .copy-btn { opacity: 1; } }
 
+  /* ---------- FAQ ---------- */
   .faq details {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
     padding: 16px 20px; margin-bottom: 12px;
@@ -139,29 +187,55 @@
   .faq summary { cursor: pointer; font-weight: 600; }
   .faq details p { color: var(--muted); margin-top: 10px; font-size: 0.94rem; }
 
-  footer {
-    margin-top: 80px; border-top: 1px solid var(--border);
-    padding: 34px 0 44px; color: var(--muted); font-size: 0.88rem;
-  }
+  /* ---------- Footer ---------- */
+  footer { margin-top: 72px; border-top: 1px solid var(--border); padding: 34px 0 44px; color: var(--muted); font-size: 0.88rem; }
   footer .links { margin-top: 10px; display: flex; gap: 18px; flex-wrap: wrap; }
+  footer .top { margin-left: auto; }
+  footer .foot-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+    .wave .fast { animation: none; }
+    html { scroll-behavior: auto; }
+    .rule span { transform: scaleX(1); animation: none !important; }
+  }
+  @media (max-width: 720px) {
+    .nav-links { display: none; }
+    .menu-btn { display: inline-block; }
+  }
+  @media (max-width: 640px) {
+    .hero { padding-top: 52px; }
+    .wave { display: none; }
+    section { padding-top: 48px; }
+    .cards { grid-template-columns: 1fr; }
+    .card.wide { grid-column: auto; }
+    .btn { text-align: center; }
+  }
 </style>
 </head>
-<body>
+<body id="top">
 
 <header class="nav">
   <div class="container nav-inner">
-    <a class="brand" href="#">SBaGen</a>
-    <nav>
-      <a href="https://uazu.net/sbagen/">Original site</a>
-      <a href="https://github.com/desireco/sbagen">Maintained fork</a>
-      <a href="https://desireco.github.io/entrain/">Entrain</a>
+    <a class="brand" href="#top">SBaGen</a>
+    <nav class="nav-links" aria-label="On this page">
+      <a href="#family">Family</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#library">Sessions</a>
+      <a href="#faq">FAQ</a>
     </nav>
+    <button class="menu-btn" aria-expanded="false" aria-controls="navDrawer">Menu</button>
+    <div class="nav-drawer" id="navDrawer">
+      <a href="#family">Family</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#library">Sessions</a>
+      <a href="#faq">FAQ</a>
+    </div>
   </div>
 </header>
 
 <main>
   <section class="hero container">
-    <p class="kicker">Sequenced Binaural Beat Generator &middot; by Jim Peters &middot; GPL v2</p>
+    <p class="kicker">Sequenced Binaural Beat Generator &middot; originally created by Jim Peters &middot; GPL v2</p>
     <h1><span class="grad">SBaGen</span>.</h1>
     <p class="lede">
       The classic binaural-beat studio: plain-text <code>.sbg</code> sequences of binaural
@@ -177,7 +251,7 @@
     <pre class="term"><span class="p">$</span> sbagen focus.sbg
 <span class="o">SBaGen 1.4.5 &middot; playing focus.sbg</span></pre>
     <div class="wave" aria-hidden="true">
-      <svg viewBox="0 0 1600 120" preserveAspectRatio="none">
+      <svg viewBox="0 0 1600 110" preserveAspectRatio="none">
         <defs>
           <linearGradient id="wg" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stop-color="#e3a72e"/>
@@ -193,11 +267,20 @@
   </section>
 
   <section id="family" class="container">
+    <div class="rule" aria-hidden="true"><span></span><span></span><span></span></div>
     <h2>The SBaGen family</h2>
     <p class="section-lede">
       The maintained fork first — then the original, the community fork, and a
       clean-room successor inspired by SBaGen.
     </p>
+
+    <div class="decision" role="list" aria-label="Which project should I use?">
+      <div class="d" role="listitem"><span class="q">Modern Linux, the classic tool</span><a class="a" href="https://github.com/desireco/sbagen">Maintained fork &rarr;</a></div>
+      <div class="d" role="listitem"><span class="q">Installers &middot; Docker &middot; isochronic</span><a class="a" href="https://github.com/ruanklein/sbagen-plus">SBaGen+ &rarr;</a></div>
+      <div class="d" role="listitem"><span class="q">Building something new</span><a class="a" href="https://desireco.github.io/entrain/">Entrain &rarr;</a></div>
+      <div class="d" role="listitem"><span class="q">The original, as released</span><a class="a" href="https://uazu.net/sbagen/">SBaGen 1.4.5 &rarr;</a></div>
+    </div>
+
     <div class="cards">
       <div class="card wide now">
         <span class="badge">maintained fork</span>
@@ -263,14 +346,14 @@
     <h2>Quick start — the maintained fork</h2>
     <p class="section-lede">Same SBaGen, working audio on modern Linux, and a test suite that proves it.</p>
 
-    <h3>Build</h3>
+    <h3>1. Build</h3>
 <pre class="block">git clone https://github.com/desireco/sbagen &amp;&amp; cd sbagen
 make            <span class="c"># dev/sbagen-fixed — file output (WAV)</span>
 make alsa       <span class="c"># rebuild with live ALSA playback — no /dev/dsp needed</span>
 make test       <span class="c"># 87-check regression suite</span>
 make check      <span class="c"># builds clean at -O0 through -Os</span></pre>
 
-    <h3>Play or render</h3>
+    <h3>2. Play or render</h3>
 <pre class="block"><span class="c"># play a session live (ALSA build)</span>
 dev/sbagen-fixed my-session.sbg
 
@@ -281,7 +364,7 @@ dev/sbagen-fixed -o out.wav my-session.sbg
 ./mksounds.sh focus10 dev/examples/focus/focus-10-a.sbg
 ./mksounds.sh drift '200+10/0.5' 00:30:00</pre>
 
-    <h3>Anatomy of a session</h3>
+    <h3>3. Anatomy of a session</h3>
 <pre class="block"><span class="c">## One-hour focus: 40 Hz gamma + 24 Hz beta over pink noise</span>
 <span class="k">all-off:</span> -
 <span class="k">focus:</span>   pink/20 180+40/30 320+24/25
@@ -365,18 +448,98 @@ create: brown/10 150+6/20
 
 <footer>
   <div class="container">
-    <p><strong>SBaGen</strong> &mdash; Sequenced Binaural Beat Generator. &copy; Jim Peters, GPL v2.
-       The maintained fork preserves all original copyright notices and license terms.</p>
-    <p>SBaGen+ is maintained by Ruan Klein. Entrain is an independent clean-room reimplementation
-       and none of these projects are affiliated with or endorsed by Jim Peters.</p>
-    <div class="links">
-      <a href="https://uazu.net/sbagen/">SBaGen (original)</a>
-      <a href="https://github.com/desireco/sbagen">Maintained fork</a>
-      <a href="https://github.com/ruanklein/sbagen-plus">SBaGen+</a>
-      <a href="https://desireco.github.io/entrain/">Entrain</a>
+    <div class="foot-row">
+      <div>
+        <p><strong>SBaGen</strong> &mdash; Sequenced Binaural Beat Generator. &copy; Jim Peters, GPL v2.
+           The maintained fork preserves all original copyright notices and license terms.</p>
+        <p>SBaGen+ is maintained by Ruan Klein. Entrain is an independent clean-room reimplementation
+           and none of these projects are affiliated with or endorsed by Jim Peters.</p>
+        <div class="links">
+          <a href="https://uazu.net/sbagen/">SBaGen (original)</a>
+          <a href="https://github.com/desireco/sbagen">Maintained fork</a>
+          <a href="https://github.com/ruanklein/sbagen-plus">SBaGen+</a>
+          <a href="https://desireco.github.io/entrain/">Entrain</a>
+        </div>
+      </div>
+      <a class="top" href="#top">Back to top ↑</a>
     </div>
   </div>
 </footer>
+
+<script>
+  (function () {
+    // Mobile menu
+    var btn = document.querySelector('.menu-btn');
+    var drawer = document.getElementById('navDrawer');
+    if (btn && drawer) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = drawer.classList.toggle('open');
+        btn.setAttribute('aria-expanded', String(open));
+      });
+      document.addEventListener('click', function (e) {
+        if (!drawer.contains(e.target) && !btn.contains(e.target)) {
+          drawer.classList.remove('open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
+      drawer.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          drawer.classList.remove('open');
+          btn.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    // Copy buttons on every code block
+    document.querySelectorAll('pre').forEach(function (pre) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'copy-btn';
+      b.textContent = 'copy';
+      b.setAttribute('aria-label', 'Copy code to clipboard');
+      pre.appendChild(b);
+      b.addEventListener('click', function () {
+        var text = pre.innerText.replace(/\ncopy\s*$/, '');
+        navigator.clipboard.writeText(text).then(function () {
+          b.textContent = 'copied';
+          b.classList.add('copied');
+          setTimeout(function () { b.textContent = 'copy'; b.classList.remove('copied'); }, 1400);
+        }).catch(function () {
+          b.textContent = 'failed';
+          setTimeout(function () { b.textContent = 'copy'; }, 1400);
+        });
+      });
+    });
+
+    // Highlight the section currently in view in the nav
+    var links = Array.prototype.slice.call(document.querySelectorAll('.nav-links a'));
+    var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+    function onScroll() {
+      var y = window.scrollY + 120;
+      var idx = -1;
+      sections.forEach(function (s, i) { if (s && s.offsetTop <= y) idx = i; });
+      links.forEach(function (a, i) { a.classList.toggle('active', i === idx); });
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // Draw the animated line dividers when they scroll into view
+    var rules = document.querySelectorAll('.rule');
+    if (rules.length) {
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+          });
+        }, { threshold: 0.4 });
+        rules.forEach(function (r) { io.observe(r); });
+      } else {
+        rules.forEach(function (r) { r.classList.add('in'); });
+      }
+    }
+  })();
+</script>
 
 </body>
 </html>
