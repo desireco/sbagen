@@ -86,6 +86,7 @@
   section { padding: 72px 0 12px; }
   h2 { font-size: 1.7rem; letter-spacing: -0.01em; margin-bottom: 10px; }
   .section-lede { color: var(--muted); max-width: 680px; margin-bottom: 34px; }
+  .section-lede code { font-family: var(--mono); color: var(--text); font-size: 0.9em; }
 
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
   .card {
@@ -176,9 +177,27 @@
   <section id="family" class="container">
     <h2>The SBaGen family</h2>
     <p class="section-lede">
-      One original, two forks, one clean-room successor — pick the tool that fits.
+      The maintained fork first — then the original, the community fork, and a
+      clean-room successor inspired by SBaGen.
     </p>
     <div class="cards">
+      <div class="card now">
+        <span class="badge">maintained fork</span>
+        <span class="era">By Desireco &middot; modern machines</span>
+        <h3>SBaGen, maintained</h3>
+        <p class="by">by Desireco &middot; GPLv2 preserved</p>
+        <p>
+          Desireco's fork of the original: <strong>cleaned up a little</strong>, never
+          reinvented. Defect fixes from a full audit of the 1.4.5 code, sound output
+          brought up to date — a working <strong>ALSA backend</strong> instead of the
+          long-dead /dev/dsp — a real Makefile, and an <strong>87-check regression
+          suite</strong> pinned to the pristine upstream build. As close to the original
+          as will work well today.
+        </p>
+        <div class="links">
+          <a href="https://github.com/desireco/sbagen">desireco/sbagen &rarr;</a>
+        </div>
+      </div>
       <div class="card">
         <span class="era">The original &middot; 1999</span>
         <h3>SBaGen 1.4.5</h3>
@@ -186,26 +205,11 @@
         <p>
           Powerful, battle-tested C from another era, GPLv2, and the
           <strong>.sbg format that still defines the workflow</strong>. The 2011 release
-          remains the reference implementation — everything below measures itself against it.
+          remains the reference implementation — the fork and entrain measure themselves
+          against it.
         </p>
         <div class="links">
           <a href="https://uazu.net/sbagen/">uazu.net/sbagen &rarr;</a>
-        </div>
-      </div>
-      <div class="card now">
-        <span class="badge">maintained fork</span>
-        <span class="era">Same program &middot; modern machines</span>
-        <h3>SBaGen, maintained</h3>
-        <p class="by">by Zeljko Dakic &middot; GPLv2 preserved</p>
-        <p>
-          The same SBaGen, kept honest: <strong>defect fixes</strong> from a full audit of the
-          1.4.5 code (segfaults, stack corruption, infinite loops, audio clicks), an
-          <strong>87-check regression suite</strong> verified against the pristine upstream
-          build, a real Makefile, and a working <strong>ALSA backend</strong> for modern Linux.
-          Minimal changes — behavior is pinned by golden hashes.
-        </p>
-        <div class="links">
-          <a href="https://github.com/desireco/sbagen">desireco/sbagen &rarr;</a>
         </div>
       </div>
       <div class="card">
@@ -223,11 +227,11 @@
         </div>
       </div>
       <div class="card">
-        <span class="era">The successor &middot; actively developed</span>
+        <span class="era">Inspired by SBaGen &middot; actively developed</span>
         <h3>entrain</h3>
         <p class="by">clean-room Go &middot; MIT licensed</p>
         <p>
-          A from-scratch reimplementation of the SBaGen workflow: reads <strong>.sbg</strong>
+          A from-scratch reimplementation inspired by SBaGen: reads <strong>.sbg</strong>
           today, authors a typed TOML format next. Renders WAV / FLAC / MP3 with true tone
           continuity, and ships <strong>beatscope</strong> to verify any renderer's output.
         </p>
@@ -237,6 +241,17 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section id="tapes" class="container">
+    <h2>Making meditation tapes? This is enough.</h2>
+    <p class="section-lede">
+      No plugins, no subscriptions, no lock-in. The fork, as-is, is more than enough to
+      create solid meditation tapes: write a plain-text <code>.sbg</code> session —
+      carriers, beats, a noise bed — render it to WAV with one command, and you're done.
+      People have been doing exactly that with the original since 1999; the fork just
+      makes it work on the machine you own today. The tape is yours.
+    </p>
   </section>
 
   <section id="quickstart" class="container">
@@ -269,7 +284,8 @@ dev/sbagen-fixed -o out.wav my-session.sbg</pre>
       <p>Only what had to change: defect fixes found while auditing the 1.4.5 code, a regression
          suite (golden hashes captured from the pristine upstream build, plus one test per fixed
          defect), a Makefile replacing the old build scripts, and the ALSA backend. The audio
-         behavior of fixed builds matches upstream &mdash; that is what the golden hashes pin.</p>
+         behavior of fixed builds matches upstream &mdash; that is what the golden hashes pin.
+         The result: as close to the original as will work well on a modern machine.</p>
     </details>
     <details>
       <summary>Which one should I use?</summary>
