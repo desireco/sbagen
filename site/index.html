@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SBaGen — Sequenced Binaural Beat Generator</title>
-<meta name="description" content="SBaGen by Jim Peters: the classic sequenced binaural-beat generator. The family — the original, a maintained fork for modern machines (defect fixes, tests, ALSA), and entrain, the actively developed Go reimplementation.">
+<meta name="description" content="SBaGen by Jim Peters: the classic sequenced binaural-beat generator. The family — the original, a maintained fork for modern machines (defect fixes, tests, ALSA), and Entrain, the actively developed Go reimplementation.">
 <link rel="canonical" href="https://desireco.github.io/sbagen/">
 <meta property="og:title" content="SBaGen — Sequenced Binaural Beat Generator">
-<meta property="og:description" content="The original by Jim Peters, a maintained fork for modern machines, and entrain — the actively developed Go reimplementation.">
+<meta property="og:description" content="The original by Jim Peters, a maintained fork for modern machines, and Entrain — the actively developed Go reimplementation.">
 <meta property="og:url" content="https://desireco.github.io/sbagen/">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e3a72e'/%3E%3Cpath d='M4 16 Q 8 6 12 16 T 20 16 T 28 16' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -82,11 +82,18 @@
   .wave .fast { animation: pulse 4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.55; } }
   @media (prefers-reduced-motion: reduce) { .wave .fast { animation: none; } html { scroll-behavior: auto; } }
+  @media (max-width: 640px) {
+    .nav-inner { flex-direction: column; height: auto; padding: 12px 0; gap: 8px; }
+    .nav nav { justify-content: center; gap: 14px; }
+    .wave { display: none; }
+    .hero { padding-top: 56px; }
+  }
 
   section { padding: 72px 0 12px; }
   h2 { font-size: 1.7rem; letter-spacing: -0.01em; margin-bottom: 10px; }
   .section-lede { color: var(--muted); max-width: 680px; margin-bottom: 34px; }
   .section-lede code { font-family: var(--mono); color: var(--text); font-size: 0.9em; }
+  .use h3 { margin: 30px 0 8px; font-size: 1.15rem; }
 
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
   .card {
@@ -101,6 +108,16 @@
   .card p { color: var(--muted); font-size: 0.93rem; flex: 1; }
   .card p strong { color: var(--text); font-weight: 600; }
   .card .links { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.9rem; }
+  .card.wide { grid-column: 1 / -1; }
+  .card.wide p { max-width: 760px; }
+  .alts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 14px; }
+  .alt { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .alt h3 { font-size: 1rem; margin-bottom: 2px; }
+  .alt h3 .tag { font-family: var(--mono); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid var(--border); border-radius: 99px; padding: 2px 7px; color: var(--muted); vertical-align: middle; margin-left: 6px; }
+  .alt .by { color: var(--muted); font-size: 0.8rem; margin-top: -4px; }
+  .alt p { color: var(--muted); font-size: 0.85rem; flex: 1; }
+  .alt .lk { margin-top: 8px; font-size: 0.85rem; display: flex; gap: 12px; flex-wrap: wrap; }
+  .alt pre { font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 4px 0 0; overflow-x: auto; }
   .badge {
     align-self: flex-start; font-size: 0.72rem; font-family: var(--mono);
     padding: 3px 9px; border-radius: 99px; border: 1px solid var(--accent); color: var(--accent);
@@ -112,6 +129,7 @@
     padding: 20px 22px; overflow-x: auto; margin: 14px 0 22px;
   }
   pre.block .c { color: #8a7a5f; }
+  pre.block .k { color: var(--accent2); }
   .note { color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
 
   .faq details {
@@ -136,7 +154,7 @@
     <nav>
       <a href="https://uazu.net/sbagen/">Original site</a>
       <a href="https://github.com/desireco/sbagen">Maintained fork</a>
-      <a href="https://desireco.github.io/entrain/">entrain</a>
+      <a href="https://desireco.github.io/entrain/">Entrain</a>
     </nav>
   </div>
 </header>
@@ -154,10 +172,10 @@
     <div class="cta">
       <a class="btn primary" href="https://github.com/desireco/sbagen">Get the maintained fork</a>
       <a class="btn" href="https://uazu.net/sbagen/">Original site</a>
-      <a class="btn" href="https://desireco.github.io/entrain/">entrain &mdash; the new engine</a>
+      <a class="btn" href="https://desireco.github.io/entrain/">Entrain &mdash; the new engine</a>
     </div>
     <pre class="term"><span class="p">$</span> sbagen focus.sbg
-<span class="o">Sequenced Binaural Beat Generator 1.4.5 &middot; playing focus.sbg</span></pre>
+<span class="o">SBaGen 1.4.5 &middot; playing focus.sbg</span></pre>
     <div class="wave" aria-hidden="true">
       <svg viewBox="0 0 1600 120" preserveAspectRatio="none">
         <defs>
@@ -181,9 +199,9 @@
       clean-room successor inspired by SBaGen.
     </p>
     <div class="cards">
-      <div class="card now">
+      <div class="card wide now">
         <span class="badge">maintained fork</span>
-        <span class="era">By Desireco &middot; modern machines</span>
+        <span class="era">Same program &middot; modern machines</span>
         <h3>SBaGen, maintained</h3>
         <p class="by">by Desireco &middot; GPLv2 preserved</p>
         <p>
@@ -198,47 +216,33 @@
           <a href="https://github.com/desireco/sbagen">desireco/sbagen &rarr;</a>
         </div>
       </div>
-      <div class="card">
-        <span class="era">The original &middot; 1999</span>
-        <h3>SBaGen 1.4.5</h3>
-        <p class="by">by Jim Peters</p>
-        <p>
-          Powerful, battle-tested C from another era, GPLv2, and the
-          <strong>.sbg format that still defines the workflow</strong>. The 2011 release
-          remains the reference implementation — the fork and entrain measure themselves
-          against it.
-        </p>
-        <div class="links">
-          <a href="https://uazu.net/sbagen/">uazu.net/sbagen &rarr;</a>
-        </div>
+    </div>
+    <div class="alts">
+      <div class="alt">
+        <h3>SBaGen 1.4.5 <span class="tag">original</span></h3>
+        <p class="by">by Jim Peters &middot; 1999 &middot; GPLv2</p>
+        <p>Powerful, battle-tested C from another era, and the .sbg format that still
+           defines the workflow. The 2011 release remains the reference — this fork and
+           Entrain measure themselves against it.</p>
+        <div class="lk"><a href="https://uazu.net/sbagen/">uazu.net/sbagen &rarr;</a></div>
       </div>
-      <div class="card">
-        <span class="era">Community fork &middot; alternative</span>
-        <h3>SBaGen+</h3>
-        <p class="by">maintained by Ruan Klein</p>
-        <p>
-          Keeps the original alive with fresh binaries for Linux, macOS and Windows, Docker
-          images, and isochronic tones on top of binaural beats. Its own development has
-          paused — the ideas continue in its successor <strong>SynapSeq</strong>.
-        </p>
-        <div class="links">
-          <a href="https://github.com/ruanklein/sbagen-plus">sbagen-plus &rarr;</a>
-          <a href="https://github.com/ruanklein/synapseq">synapseq &rarr;</a>
-        </div>
+      <div class="alt">
+        <h3>SBaGen+ <span class="tag">fork</span></h3>
+        <p class="by">maintained by Ruan Klein &middot; GPLv2</p>
+        <p>Keeps the original alive with fresh binaries for Linux, macOS and Windows,
+           Docker images, and isochronic tones. Development paused — the ideas continue
+           in its successor SynapSeq.</p>
+        <div class="lk"><a href="https://github.com/ruanklein/sbagen-plus">sbagen-plus &rarr;</a>
+           <a href="https://github.com/ruanklein/synapseq">synapseq &rarr;</a></div>
       </div>
-      <div class="card">
-        <span class="era">Inspired by SBaGen &middot; actively developed</span>
-        <h3>entrain</h3>
-        <p class="by">clean-room Go &middot; MIT licensed</p>
-        <p>
-          A from-scratch reimplementation inspired by SBaGen: reads <strong>.sbg</strong>
-          today, authors a typed TOML format next. Renders WAV / FLAC / MP3 with true tone
-          continuity, and ships <strong>beatscope</strong> to verify any renderer's output.
-        </p>
-        <div class="links">
-          <a href="https://desireco.github.io/entrain/">homepage &rarr;</a>
-          <a href="https://github.com/desireco/entrain">github &rarr;</a>
-        </div>
+      <div class="alt">
+        <h3>Entrain <span class="tag">inspired</span></h3>
+        <p class="by">clean-room Go &middot; MIT licensed &middot; actively developed</p>
+        <p>A from-scratch reimplementation inspired by SBaGen: reads .sbg today, authors a
+           typed TOML format next. Renders WAV / FLAC / MP3 and ships beatscope to verify
+           any renderer's output.</p>
+        <div class="lk"><a href="https://desireco.github.io/entrain/">homepage &rarr;</a>
+           <a href="https://github.com/desireco/entrain">github &rarr;</a></div>
       </div>
     </div>
   </section>
@@ -252,27 +256,88 @@
       People have been doing exactly that with the original since 1999; the fork just
       makes it work on the machine you own today. The tape is yours.
     </p>
+    <p class="note"><a href="#quickstart">One command to try it — see Quick start ↓</a></p>
   </section>
 
-  <section id="quickstart" class="container">
+  <section id="quickstart" class="container use">
     <h2>Quick start — the maintained fork</h2>
     <p class="section-lede">Same SBaGen, working audio on modern Linux, and a test suite that proves it.</p>
-<pre class="block"><span class="c"># build</span>
-git clone https://github.com/desireco/sbagen &amp;&amp; cd sbagen
-make            <span class="c"># dev/sbagen-fixed — file output (WAV)</span>
-make alsa       <span class="c"># live playback on modern Linux — no /dev/dsp needed</span>
-make test       <span class="c"># 87-check regression suite</span>
 
-<span class="c"># play or render a session</span>
+    <h3>Build</h3>
+<pre class="block">git clone https://github.com/desireco/sbagen &amp;&amp; cd sbagen
+make            <span class="c"># dev/sbagen-fixed — file output (WAV)</span>
+make alsa       <span class="c"># rebuild with live ALSA playback — no /dev/dsp needed</span>
+make test       <span class="c"># 87-check regression suite</span>
+make check      <span class="c"># builds clean at -O0 through -Os</span></pre>
+
+    <h3>Play or render</h3>
+<pre class="block"><span class="c"># play a session live (ALSA build)</span>
 dev/sbagen-fixed my-session.sbg
-dev/sbagen-fixed -o out.wav my-session.sbg</pre>
-    <p class="note">The original 2011 release predates modern sound systems &mdash; upstream expects
-       <code>/dev/dsp</code> (OSS). The fork's ALSA build plays live; the plain build writes files.</p>
+
+<span class="c"># or render straight to WAV</span>
+dev/sbagen-fixed -o out.wav my-session.sbg
+
+<span class="c"># helper: MP3 render — a whole .sbg file, or a one-line tone-set</span>
+./mksounds.sh focus10 dev/examples/focus/focus-10-a.sbg
+./mksounds.sh drift '200+10/0.5' 00:30:00</pre>
+
+    <h3>Anatomy of a session</h3>
+<pre class="block"><span class="c">## One-hour focus: 40 Hz gamma + 24 Hz beta over pink noise</span>
+<span class="k">all-off:</span> -
+<span class="k">focus:</span>   pink/20 180+40/30 320+24/25
+
+<span class="k">0:00:00</span>  focus
+<span class="k">1:00:00</span>  all-off</pre>
+    <p class="note">Tone-set line: <code>carrier+beat/amplitude</code>, amplitudes on a 0&ndash;100 scale
+       (keep the sum under 100). Schedule lines: <code>time name</code> &mdash; absolute, <code>NOW</code>,
+       or <code>+mm:ss</code> relative. &#127911; Headphones required &mdash; binaural beats collapse on speakers.</p>
+    <p class="note">Live playback is Linux (ALSA). On Windows and macOS the plain build renders
+       WAV files &mdash; or use <a href="https://github.com/ruanklein/sbagen-plus">SBaGen+</a> installers.</p>
+  </section>
+
+  <section id="library" class="container">
+    <h2>Three solid sessions</h2>
+    <p class="section-lede">
+      Copy, save as a <code>.sbg</code> file, play. A full library of 130 example
+      sequences ships in the repo — these three are all you need to start.
+    </p>
+    <div class="alts">
+      <div class="alt">
+        <h3>Focus <span class="tag">40 Hz gamma</span></h3>
+        <p>Sharp attention for deep work — 180 Hz carrier over a quiet pink bed.</p>
+<pre>all-off: -
+focus: pink/15 180+40/25
+
+0:00:00  focus
+1:00:00  all-off</pre>
+      </div>
+      <div class="alt">
+        <h3>Relaxation <span class="tag">10 Hz alpha</span></h3>
+        <p>Unwind without getting sleepy — 200 Hz carrier, half an hour.</p>
+<pre>all-off: -
+relax: pink/10 200+10/20
+
+0:00:00  relax
+0:30:00  all-off</pre>
+      </div>
+      <div class="alt">
+        <h3>Creativity <span class="tag">6 Hz theta</span></h3>
+        <p>Loose, associative thinking — 150 Hz carrier over a warm brown bed.</p>
+<pre>all-off: -
+create: brown/10 150+6/20
+
+0:00:00  create
+0:45:00  all-off</pre>
+      </div>
+    </div>
+    <p class="note">Play any of them with <code>dev/sbagen-fixed focus.sbg</code> — and browse the
+       full 130-sequence library on
+       <a href="https://github.com/desireco/sbagen/tree/main/sbagen-1.4.5/examples">GitHub</a>.</p>
   </section>
 
   <section id="faq" class="container faq">
     <h2>Questions</h2>
-    <details>
+    <details open>
       <summary>Is this the official SBaGen site?</summary>
       <p>No. The official home of SBaGen is <a href="https://uazu.net/sbagen/">uazu.net/sbagen</a>
          &mdash; SBaGen is &copy; Jim Peters and released under the GPL v2. This family page is
@@ -293,7 +358,7 @@ dev/sbagen-fixed -o out.wav my-session.sbg</pre>
          <a href="https://github.com/desireco/sbagen">maintained fork</a>. Prefer installers,
          Docker, or isochronic tones? <a href="https://github.com/ruanklein/sbagen-plus">SBaGen+</a>.
          Building something new &mdash; modern formats, embeddable engine, MIT license?
-         <a href="https://desireco.github.io/entrain/">entrain</a>.</p>
+         <a href="https://desireco.github.io/entrain/">Entrain</a>.</p>
     </details>
   </section>
 </main>
@@ -302,13 +367,13 @@ dev/sbagen-fixed -o out.wav my-session.sbg</pre>
   <div class="container">
     <p><strong>SBaGen</strong> &mdash; Sequenced Binaural Beat Generator. &copy; Jim Peters, GPL v2.
        The maintained fork preserves all original copyright notices and license terms.</p>
-    <p>SBaGen+ is maintained by Ruan Klein. entrain is an independent clean-room reimplementation
+    <p>SBaGen+ is maintained by Ruan Klein. Entrain is an independent clean-room reimplementation
        and none of these projects are affiliated with or endorsed by Jim Peters.</p>
     <div class="links">
       <a href="https://uazu.net/sbagen/">SBaGen (original)</a>
       <a href="https://github.com/desireco/sbagen">Maintained fork</a>
       <a href="https://github.com/ruanklein/sbagen-plus">SBaGen+</a>
-      <a href="https://desireco.github.io/entrain/">entrain</a>
+      <a href="https://desireco.github.io/entrain/">Entrain</a>
     </div>
   </div>
 </footer>
