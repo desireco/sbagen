@@ -447,6 +447,55 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# Concurrent engines.  The Engine struct exists so two parse+render
+# pipelines can run at once; each thread's output must be byte-identical
+# to the equivalent CLI render -- concurrency may not change a sample.
+if command -v cc >/dev/null 2>&1; then
+  if make unit-two >/dev/null 2>&1; then
+    echo "== concurrent engines (two threads, two engines) =="
+    rm -f "$WORK/t1.raw" "$WORK/t2.raw" "$WORK/t1.wav" "$WORK/t2.wav"
+    SPECS_T1='200+10/0.5'
+    SPECS_T2='spin:3+40/0.2 pink/0.2 200+8/0.3'
+    if ! timeout 120 tests/unit_two "$WORK/t1.raw" "$SPECS_T1" \
+                                  "$WORK/t2.raw" "$SPECS_T2" \
+                                  44100 8000 3000 >/dev/null 2>&1; then
+      no "two concurrent engines render" "unit_two failed"
+    else
+      timeout 60 "$SBAGEN" -Q -S -W -o "$WORK/t1.wav" -F 3000 -L 00:00:08 -i "$SPECS_T1" >/dev/null 2>&1
+      timeout 60 "$SBAGEN" -Q -S -W -o "$WORK/t2.wav" -F 3000 -L 00:00:08 -i "$SPECS_T2" >/dev/null 2>&1
+      if python3 - "$WORK/t1.wav" "$WORK/t1.raw" "$WORK/t2.wav" "$WORK/t2.raw" <<'PY'
+import sys
+def data(p):
+    d=open(p,'rb').read()
+    return d[d.find(b'data')+8:]
+for wav, raw in ((sys.argv[1],sys.argv[2]),(sys.argv[3],sys.argv[4])):
+    if data(wav) != open(raw,'rb').read():
+        sys.exit(1)
+sys.exit(0)
+PY
+      then
+        ok "two concurrent engines: both byte-identical to the CLI"
+      else
+        no "two concurrent engines: both byte-identical to the CLI"
+      fi
+      # Repeat a few times: a data race usually shows up under repetition
+      race=0
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        timeout 120 tests/unit_two "$WORK/t1.raw" "$SPECS_T1" \
+                                   "$WORK/t2.raw" "$SPECS_T2" \
+                                   44100 4000 2000 >/dev/null 2>&1 || race=1
+      done
+      [ $race -eq 0 ] && ok "ten repeated concurrent renders, no failures" \
+                      || no "ten repeated concurrent renders, no failures"
+    fi
+  else
+    sk "concurrent engines" "make unit-two failed"
+  fi
+else
+  sk "concurrent engines" "no C compiler"
+fi
+
+# --------------------------------------------------------------------------
 echo "== sweep: all bundled examples parse =="
 sweep_ok=0; sweep_bad=0
 for f in "$ROOT"/dev/examples/*/*.sbg; do

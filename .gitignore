@@ -22,3 +22,4 @@ dev/libs/linux-libvorbisidec64.a
 dev/libsbagen.a
 dev/sbagen-lib.o
 tests/unit_render
+tests/unit_two

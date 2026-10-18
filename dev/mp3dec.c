@@ -6,11 +6,22 @@
 //      http://uazu.net/sbagen/.  Released under the GNU GPL version 2.
 //
 
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 #include "libs/mad.h"
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 
-extern FILE *mix_in;
+
+// NB: this file is included by sbagen.c AFTER the Engine name macros.
+// mp3_read runs on the inbuf producer thread, where the __thread E_current
+// is 0, so it must not touch engine state: it reads mix_fp (captured from
+// e->mix_in by main) and reports the stream rate through the captured
+// pointers below instead of writing e->out_rate directly.
 extern void *Alloc(size_t);
 extern void error(char *fmt, ...);
+
+static int *mp3_ratep, *mp3_ratedefp;	// -> e->out_rate / e->out_rate_def
 
 int mp3_read(int *dst, int dlen);
 
@@ -36,6 +47,8 @@ mp3_init() {
    stream.error= MAD_ERROR_BUFLEN;
    synth_extra= 0;
 
+   mp3_ratep= &out_rate;		// Engine fields, captured for the thread
+   mp3_ratedefp= &out_rate_def;
    inbuf_start(mp3_read, 256*1024);	// 1024K buffer: 3s@44.1kHz
 }
 
@@ -92,9 +105,9 @@ mp3_read(int *dst, int dlen) {
 	 }
 	 
 	 // Fill buffer
-	 cnt= fread(rp, 1, mp3_buf + mp3_len - rp, mix_in);
+	 cnt= fread(rp, 1, mp3_buf + mp3_len - rp, mix_fp);
 	 if (cnt == 0) {
-	    if (feof(mix_in))
+	    if (feof(mix_fp))
 	       return dst-dst0;
 	    error("Read error on MP3 input stream:\n  %s", strerror(errno));
 	 }
@@ -116,10 +129,11 @@ mp3_read(int *dst, int dlen) {
 	       mad_stream_errorstr(&stream));
       }
 
-      // Pickup sampling rate if not picked up yet
-      if (out_rate_def) {
-	 out_rate= frame.header.samplerate;
-	 out_rate_def= 0;
+      // Pickup sampling rate if not picked up yet.  NB through the captured
+      // pointers: this runs on the reader thread (see note above).
+      if (*mp3_ratedefp) {
+	 *mp3_ratep= frame.header.samplerate;
+	 *mp3_ratedefp= 0;
       }
       
       // Synthesize frame into samples

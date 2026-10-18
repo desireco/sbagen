@@ -17,10 +17,11 @@
 //	    returns through a 2011 codebase that treats exit as its error
 //	    handling is a project of its own; until then the library is
 //	    honest about it.
-//	  - one engine per process.  The parse/render core still works from
-//	    file-scope state; the sink and the library entry points are
-//	    re-entrant enough for one render at a time, which is what an
-//	    embedder realistically does (render a sequence, get samples).
+//	  - mix input (-m) and compressed output (-w) are not available
+//	    in-process; the library renders 16-bit stereo to memory only.
+//	  - the backends (ALSA/OSS, encoder state, the mix reader thread)
+//	    remain process-global and are CLI-only; engines themselves are
+//	    fully per-instance, so concurrent renders are safe (and tested).
 //	  - mix input (-m) is not available in-process.
 //
 //	Example:
@@ -36,12 +37,21 @@
 #ifndef SBAGENLIB_H
 #define SBAGENLIB_H
 
+struct Engine;
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Sentinel out_fd value marking the memory sink (no real fd uses it).
 #define LIB_SINK_FD (-7777)
+
+// Engine lifecycle.  Each render creates its own engine internally; these
+// are exposed for callers that want to drive the parse/render machinery
+// themselves.  All engine state is per-instance and thread-local through
+// E_current, so engines can be created and rendered concurrently.
+struct Engine *engine_new(void);
+void engine_init(struct Engine *e);
+void engine_free(struct Engine *e);
 
 // Render a tone-set specification (immediate mode, as `sbagen -i`) into
 // memory.
@@ -55,7 +65,8 @@ extern "C" {
 //   nframes   receives the number of sample frames rendered
 //
 // Returns 0 on success.  On any failure this exits the process (see the
-// limitations note above), like the CLI does.
+// limitations note above), like the CLI does.  Safe to call concurrently
+// from multiple threads: each call runs against its own engine.
 int sbagen_render_immediate(const char *specs, int rate, int len_ms,
 			    int fade_ms, short **out, int *nframes);
 

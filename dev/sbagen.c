@@ -228,22 +228,24 @@ int raw_mix_in(int *dst, int dlen);
 int scanOptions(int *acp, char ***avp);
 void handleOptions(char *p);
 void setupOptC(char *spec) ;
-extern int out_rate, out_rate_def;
 void create_drop(int ac, char **av);
 void create_slide(int ac, char **av);
+// Codec modules, included at the end of this file
+void ogg_init(void);
+void ogg_term(void);
+void mp3_init(void);
+void mp3_term(void);
+void looper_init(void);
+void looper_term(void);
+void enc_set(int kind, FILE *fp, int rate, int channels, int bits);
+void enc_write(FILE *fp, const short *data, int frames, int channels);
+void enc_finish(FILE *fp);
 
 #define ALLOC_ARR(cnt, type) ((type*)Alloc((cnt) * sizeof(type)))
 #define uint unsigned int
 
-#ifdef OGG_DECODE
-#include "oggdec.c"
-#endif
-#ifdef MP3_DECODE
-#include "mp3dec.c"
-#endif
-#if defined(HAVE_FLAC) || defined(HAVE_OPUS)
-#include "encdec.c"
-#endif
+// NB: the codec modules are included at the END of this file, after the
+// Engine name macros, so they see the current engine's fields directly.
 #ifdef SBAGEN_LIB
 // Public API decls + LIB_SINK_FD, needed before writeOut()/setup_device()
 // which reference the sink; engine.c (at the end) includes it again.
@@ -396,7 +398,7 @@ struct NameDef {
 
 struct BlockDef {
   BlockDef *nxt;		// Next in chain
-  char *lin;			// StrDup'd line
+  char *blin;			// StrDup'd line
 };
 
 #define ST_AMP 0x7FFFF		// Amplitude of wave in sine-table
@@ -404,67 +406,188 @@ struct BlockDef {
 #define NS_DITHER 16		// How many bits right to shift the noise for dithering
 #define NS_AMP (ST_AMP<<NS_ADJ)
 #define ST_SIZ 16384		// Number of elements in sine-table (power of 2)
-int *sin_table;
-#define AMP_DA(pc) (40.96 * (pc))	// Display value (%age) to ->amp value
-#define AMP_AD(amp) ((amp) / 40.96)	// Amplitude value to display %age
-int *waves[100];		// Pointers are either 0 or point to a sin_table[]-style array of int
+//
+//	The engine: all mutable state of the parser and the render core.
+//
+//	Historically these were file-scope globals.  They are now fields of a
+//	struct; all the code below still refers to them by their old names,
+//	which are macros resolving through the thread-local E_current.  That
+//	kept ~450 reference sites untouched, and the compiler flags any local
+//	that shadows one of these names (it no longer compiles), so nothing
+//	can silently mean two things.
+//
+//	The CLI builds one engine and points E_current at it, exactly like the
+//	old globals.  Library builds create one engine per render (engine_new),
+//	so two threads can parse and render two sequences at once -- proved by
+//	the concurrent-engine tests in tests/run.sh.
+//
+//	Deliberately NOT per-engine: bigendian and pdir (machine/program
+//	properties), enc_* / alsa_pcm / mix_fp and the inbuf ring (backends,
+//	driven only by the CLI, which is single-threaded), and the WIN/MAC
+//	audio buffer pools.
+//
 
-Channel chan[N_CH];		// Current channel states
-int now;			// Current time (milliseconds from midnight)
-Period *per= 0;			// Current period
-NameDef *nlist;			// Full list of name definitions
+struct AmpAdj {
+   double freq, adj;
+};
 
-int *tmp_buf;			// Temporary buffer for 20-bit mix values
-short *out_buf;			// Output buffer
-int out_bsiz;			// Output buffer size (bytes)
-int out_blen;			// Output buffer length (samples) (1.0* or 0.5* out_bsiz)
-int out_bps;			// Output bytes per sample (2 or 4)
-int out_buf_ms;			// Time to output a buffer-ful in ms
-int out_buf_lo;			// Time to output a buffer-ful, fine-tuning in ms/0x10000
-int out_fd;			// Output file descriptor
-int out_rate= 44100;		// Sample rate
-int out_rate_def= 1;		// Sample rate is default value, not set by user
-int out_mode= 1;		// Output mode: 0 unsigned char[2], 1 short[2], 2 swapped short[2]
-int out_prate= 10;		// Rate of parameter change (for file and pipe output only)
-int fade_int= 60000;		// Fade interval (ms)
-FILE *in;			// Input sequence file
-int in_lin;			// Current input line
-char buf[4096];			// Buffer for current line
-char buf_copy[4096];		// Used to keep unmodified copy of line
-char *lin;			// Input line (uses buf[])
-char *lin_copy;			// Copy of input line
-double spin_carr_max;		// Maximum 'carrier' value for spin (really max width in us)
+#define NS_BANDS 9
+typedef struct Noise Noise;
+struct Noise {
+  int val;		// Current output value
+  int inc;		// Increment
+};
 
-#define NS_BIT 10
-int ns_tbl[1<<NS_BIT];
-int ns_off= 0;
-
-int fast_tim0= -1;		// First time mentioned in the sequence file (for -q and -S option)
-int fast_tim1= -1;		// Last time mentioned in the sequence file (for -E option)
-int fast_mult= 0;		// 0 to sync to clock (adjusting as necessary), or else sync to
+typedef struct Engine Engine;
+struct Engine {
+  // --- period ring: parser writes it, corrVal() walks it ---
+  Period *per;			// Current period
+  NameDef *nlist;		// Full list of name definitions
+  int now;			// Current time (milliseconds from midnight)
+  int fast_tim0;		// First time mentioned in the sequence file (for -q and -S option)
+  int fast_tim1;		// Last time mentioned in the sequence file (for -E option)
+  int fast_mult;		// 0 to sync to clock (adjusting as necessary), or else sync to
 				//  output rate, with the multiplier indicated
-S64 byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
-int loop_stop= 0;		// Set by outChunk() when the render is complete;
+  int fade_int;			// Fade interval (ms)
+
+  // --- synth core ---
+  Channel chan[N_CH];		// Current channel states
+  int *sin_table;
+  int *waves[100];		// Pointers are either 0 or point to a sin_table[]-style array of int
+  double spin_carr_max;		// Maximum 'carrier' value for spin (really max width in us)
+  struct AmpAdj ampadj[16];	// List of maximum 16 (freq,adj) pairs, freq-increasing order
+  int opt_c;			// Number of -c option points provided (max 16)
+
+  // --- pink noise / dither ---
+#define NS_BIT 10
+  int seed;			// ZX-Spectrum LCG state (seed= seed*75 % 131074)
+  Noise ntbl[NS_BANDS];
+  int nt_off;
+  int noise_buf[256];
+  uchar noise_off;
+  int ns_tbl[1<<NS_BIT];
+  int ns_off;
+  int rand0, rand1;		// White-noise dither LCG
+
+  // --- output ---
+  int *tmp_buf;			// Temporary buffer for 20-bit mix values
+  short *out_buf;		// Output buffer
+  int out_bsiz;			// Output buffer size (bytes)
+  int out_blen;			// Output buffer length (samples) (1.0* or 0.5* out_bsiz)
+  int out_bps;			// Output bytes per sample (2 or 4)
+  int out_buf_ms;		// Time to output a buffer-ful in ms
+  int out_buf_lo;		// Time to output a buffer-ful, fine-tuning in ms/0x10000
+  int out_fd;			// Output file descriptor
+  int out_rate;			// Sample rate
+  int out_rate_def;		// Sample rate is default value, not set by user
+  int out_mode;			// Output mode: 0 unsigned char[2], 1 short[2], 2 swapped short[2]
+  int out_prate;		// Rate of parameter change (for file and pipe output only)
+  S64 byte_count;		// Number of bytes left to output, or -1 if unlimited
+  int loop_stop;		// Set by outChunk() when the render is complete;
 				// loop() then returns instead of the exit(0)
 				// it used to call from mid-outChunk.  Lets a
 				// library build regain control (SBAGEN_LIB).
-int tty_erase;			// Chars to erase from current line (for ESC[K emulation)
+  int mix_flag;			// Has 'mix/*' been used in the sequence?
+  FILE *mix_in;			// Input stream for mix sound data, or 0
+  int mix_cnt;			// Version number from mix filename (#<digits>), or -1
 
-int opt_D;
-int opt_M;
-int opt_Q;
-int opt_S;
-int opt_E;
-int opt_W;
-int opt_O;
-int opt_L= -1;			// Length in ms, or -1
-int opt_T= -1;			// Start time in ms, or -1
-char *opt_o;			// File name to output to, or 0
-char *opt_m;			// File name to read mix data from, or 0
-char *opt_d= "/dev/dsp";	// Output device
-char *opt_a= "default";	// ALSA PCM device name (-A)
-char *opt_w;			// Compressed output format: "flac" or "opus", or 0
-FILE *enc_fp;			// Destination for compressed output (-w)
+  // --- parse scratch ---
+  FILE *in;			// Input sequence file
+  int in_lin;			// Current input line
+  char buf[4096];		// Buffer for current line
+  char buf_copy[4096];		// Used to keep unmodified copy of line
+  char *lin;			// Input line (uses buf[])
+  char *lin_copy;		// Copy of input line
+
+  // --- options: set by the CLI, and by options lines inside sequence files ---
+  int opt_D;
+  int opt_M;
+  int opt_Q;
+  int opt_S;
+  int opt_E;
+  int opt_W;
+  int opt_O;
+  int opt_L;			// Length in ms, or -1
+  int opt_T;			// Start time in ms, or -1
+  char *opt_o;			// File name to output to, or 0
+  char *opt_m;			// File name to read mix data from, or 0
+  char *opt_d;			// Output device
+  char *opt_a;			// ALSA PCM device name (-A)
+  char *opt_w;			// Compressed output format: "flac" or "opus", or 0
+
+  int tty_erase;		// Chars to erase from current line (for ESC[K emulation)
+
+  // --- library render state (used by engine.c; zero when not rendering) ---
+  // The sample sink is per-engine because two engines can render at once;
+  // it used to be engine.c statics, which two threads happily clobbered.
+  short *lib_sink;		// Caller's sample buffer
+  size_t lib_sink_len;		// Capacity in bytes
+  size_t lib_sink_fill;		// Bytes written so far
+};
+
+// NB: engine_init/engine_free/engine_new sit BEFORE the name macros below,
+// so their e->field accesses are direct and not routed through E_current.
+void engine_init(Engine *e) {
+  memset(e, 0, sizeof(*e));
+  e->out_fd= -1;
+  e->out_rate= 44100;
+  e->out_rate_def= 1;
+  e->out_mode= 1;
+  e->out_prate= 10;
+  e->fade_int= 60000;
+  e->seed= 2;
+  e->fast_tim0= -1;
+  e->fast_tim1= -1;
+  e->byte_count= -1;
+  e->opt_L= -1;
+  e->opt_T= -1;
+  e->opt_d= "/dev/dsp";
+  e->opt_a= "default";
+}
+
+// Release everything an engine owns.  Does not close mix_in: the CLI owns
+// the file lifecycle, and the library never opens one.
+void engine_free(Engine *e) {
+  int a;
+  Period *p, *pn;
+  NameDef *n, *nn;
+  BlockDef *b, *bn;
+
+  free(e->sin_table);
+  for (a= 0; a<100; a++) free(e->waves[a]);
+  free(e->tmp_buf);
+  free(e->out_buf);
+  if (e->per) {
+    p= e->per;
+    do { pn= p->nxt; free(p); p= pn; } while (p != e->per);
+  }
+  for (n= e->nlist; n; n= nn) {
+    free(n->name);
+    for (b= n->blk; b; b= bn) { bn= b->nxt; free(b->blin); free(b); }
+    nn= n->nxt; free(n);
+  }
+  memset(e, 0, sizeof(*e));	// A freed engine is visibly dead
+  e->out_fd= -1;
+}
+
+Engine *engine_new(void) {
+  Engine *e= (Engine*)calloc(1, sizeof(Engine));
+  if (!e) return 0;
+  engine_init(e);
+  return e;
+}
+
+#ifndef SBAGEN_LIB
+static Engine default_engine;			// The CLI's one engine
+#endif
+static __thread Engine *E_current= 0;		// Engine the name macros resolve through
+
+#include "engine_names.h"
+
+#define AMP_DA(pc) (40.96 * (pc))	// Display value (%age) to ->amp value
+#define AMP_AD(amp) ((amp) / 40.96)	// Amplitude value to display %age
+
+FILE *enc_fp;			// Destination for compressed output (-w); CLI-only
 
 #if (defined(HAVE_FLAC) || defined(HAVE_OPUS)) && !defined(SBAGEN_LIB)
 // enc_finish() takes the destination as an argument (encdec.c is included
@@ -484,15 +607,11 @@ void alsa_drain() {
 }
 #endif
 
-FILE *mix_in;			// Input stream for mix sound data, or 0
-int mix_cnt;			// Version number from mix filename (#<digits>), or -1
+FILE *mix_fp;			// Mix input for the reader thread (raw_mix_in).
+				// Captured from e->mix_in at inbuf_start() so the
+				// producer thread never touches E_current (a fresh
+				// __thread variable is 0 there).
 int bigendian;			// Is this platform Big-endian?
-int mix_flag= 0;		// Has 'mix/*' been used in the sequence?
-
-int opt_c;			// Number of -c option points provided (max 16)
-struct AmpAdj { 
-   double freq, adj;
-} ampadj[16];			// List of maximum 16 (freq,adj) pairs, freq-increasing order
 
 char *pdir;			// Program directory (used as second place to look for -m files)
 
@@ -549,7 +668,7 @@ int (*ib_read)(int*,int);  // Routine to refill buffer
 
 int 
 inbuf_loop(void *vp) {
-   int now= -1;
+   int upt= -1;
    int waited= 0;	// Used to bail out if the main thread dies for some reason
    int a;
 
@@ -584,10 +703,10 @@ inbuf_loop(void *vp) {
 
       // Whenever we roll over, recalculate 'ib_cycle'
       if (ib_wr < wr) {
-	 int prev= now;
-	 now= calcNow();
-	 if (prev >= 0 && now > prev)
-	    ib_cycle= now - prev;
+	 int prev= upt;
+	 upt= calcNow();
+	 if (prev >= 0 && upt > prev)
+	    ib_cycle= upt - prev;
 	 //debug("Input buffer cycle duration is now %dms", ib_cycle);
       }
    }
@@ -710,6 +829,9 @@ int
 main(int argc, char **argv) {
    short test= 0x1100;
    int rv;
+
+   engine_init(&default_engine);
+   E_current= &default_engine;
    char *p;
    
    pdir= StrDup(argv[0]);
@@ -820,6 +942,10 @@ main(int argc, char **argv) {
 	 }
 	 if (!mix_in)
 	    error("Can't open -m option mix input file: %s", opt_m);
+	 // Capture for the reader thread immediately: ogg_init()/mp3_init()
+	 // start it below, before the generic capture further down used to
+	 // happen.  See mix_fp's comment -- the thread cannot reach e->mix_in.
+	 mix_fp= mix_in;
 
 	 // Pick up extension
 	 if (p-opt_m >= 4 && p[-4] == '.') {
@@ -847,7 +973,7 @@ main(int argc, char **argv) {
       }
       // If this is a raw/wav data stream, setup a 256*1024-int
       // buffer (3s@44.1kHz)
-      if (raw) inbuf_start(raw_mix_in, 256*1024);
+      if (raw) inbuf_start(raw_mix_in, 256*1024);	// mix_fp already captured
    }
    
    loop();
@@ -1064,32 +1190,32 @@ setupOptC(char *spec) {
 //
 
 void 
-find_wav_data_start(FILE *in) {
-   unsigned char buf[16];
+find_wav_data_start(FILE *f) {
+   unsigned char hdr[16];
 
-   if (1 != fread(buf, 12, 1, in)) goto bad;
-   if (0 != memcmp(buf, "RIFF", 4)) goto bad;
-   if (0 != memcmp(buf+8, "WAVE", 4)) goto bad;
+   if (1 != fread(hdr, 12, 1, f)) goto bad;
+   if (0 != memcmp(hdr, "RIFF", 4)) goto bad;
+   if (0 != memcmp(hdr+8, "WAVE", 4)) goto bad;
    
    while (1) {
       int len;
-      if (1 != fread(buf, 8, 1, in)) goto bad;
-      if (0 == memcmp(buf, "data", 4)) return;		// We're in the right place!
-      len= buf[4] + (buf[5]<<8) + (buf[6]<<16) + (buf[7]<<24);
+      if (1 != fread(hdr, 8, 1, f)) goto bad;
+      if (0 == memcmp(hdr, "data", 4)) return;		// We're in the right place!
+      len= hdr[4] + (hdr[5]<<8) + (hdr[6]<<16) + (hdr[7]<<24);
       if (len & 1) len++;
-      if (out_rate_def && 0 == memcmp(buf, "fmt ", 4)) {
+      if (out_rate_def && 0 == memcmp(hdr, "fmt ", 4)) {
 	 // Grab the sample rate to use as the default if available
-	 if (1 != fread(buf, 8, 1, in)) goto bad;
+	 if (1 != fread(hdr, 8, 1, f)) goto bad;
 	 len -= 8;
-	 out_rate= buf[4] + (buf[5]<<8) + (buf[6]<<16) + (buf[7]<<24);
+	 out_rate= hdr[4] + (hdr[5]<<8) + (hdr[6]<<16) + (hdr[7]<<24);
 	 out_rate_def= 0;
       }
-      if (0 != fseek(in, len, SEEK_CUR)) goto bad;
+      if (0 != fseek(f, len, SEEK_CUR)) goto bad;
    }
 
  bad:
    warn("WARNING: Not a valid WAV file, treating as RAW");
-   rewind(in);
+   rewind(f);
 }
 
 //
@@ -1102,9 +1228,11 @@ raw_mix_in(int *dst, int dlen) {
    short *tmp= (short*)(dst + dlen/2);
    int a, rv;
    
-   rv= fread(tmp, 2, dlen, mix_in);
+   // NB mix_fp, not mix_in: this runs on the inbuf producer thread, where
+   // the __thread E_current is 0.  main() captures the pointer below.
+   rv= fread(tmp, 2, dlen, mix_fp);
    if (rv == 0) {
-      if (feof(mix_in))
+      if (feof(mix_fp))
 	 return 0;
       error("Read error on mix input:\n  %s", strerror(errno));
    }
@@ -1360,8 +1488,6 @@ int userTime() { return 0; }
 
 #define RAND_MULT 75
 
-static int seed= 2;
-
 //inline int qrand() {
 //  return (seed= seed * 75 % 131074) - 65535;
 //}
@@ -1372,17 +1498,6 @@ static int seed= 2;
 //	random number generator, and smooths the lower frequency bands
 //	as well.
 //
-
-#define NS_BANDS 9
-typedef struct Noise Noise;
-struct Noise {
-  int val;		// Current output value
-  int inc;		// Increment
-};
-Noise ntbl[NS_BANDS];
-int nt_off;
-int noise_buf[256];
-uchar noise_off= 0;
 
 static inline int 
 noise2() {
@@ -1504,7 +1619,7 @@ loop() {
     }
     else {
       // Synchronize with real clock, gently over the next second or so
-      char buf[32];
+      char sbuf[32];
       int diff= calcNow() - now;
       if (abs(diff) > H12) diff= 0;
       sprintf(buf, "(%d)", diff); 
@@ -1516,9 +1631,9 @@ loop() {
       if (DEBUG_CHK_UTIME) {
 	int prev= utime;
 	utime= userTime();
-	sprintf(buf, "%d ticks", utime-prev);		// Replaces standard message
+	sprintf(sbuf, "%d ticks", utime-prev);		// Replaces standard message
       }
-      status(buf);
+      status(sbuf);
     }
   }
 }
@@ -1531,8 +1646,6 @@ loop() {
 //	slower, but then it probably won't have to run at as high a
 //	sample rate.
 //
-
-int rand0, rand1;
 
 void 
 outChunk() {
@@ -1699,14 +1812,14 @@ outChunk() {
 } 
 
 void 
-writeOut(char *buf, int siz) {
+writeOut(char *data, int siz) {
   int rv;
 
 #ifdef SBAGEN_LIB
   // Library memory sink: the caller's buffer, not a file or device.  The
   // sentinel fd is set by sbagen_render_immediate() before loop() runs.
   if (out_fd == LIB_SINK_FD) {
-     sbagen_sink_write(buf, siz);
+     sbagen_sink_write(data, siz);
      return;
   }
 #endif
@@ -1718,7 +1831,7 @@ writeOut(char *buf, int siz) {
      // out_bps is 4 for 16-bit stereo, so siz/4 is the frame count.  The
      // final block may be shorter than a whole frame, which the encoders
      // handle by flushing.
-     enc_write(enc_fp, (const short*)buf, siz / out_bps, 2);
+     enc_write(enc_fp, (const short*)data, siz / out_bps, 2);
      return;
   }
 #endif
@@ -1738,16 +1851,16 @@ writeOut(char *buf, int siz) {
 	//debug_win32_buffer_status();
      }
 
-     memcpy(aud_head[aud_current]->lpData, buf, siz);
+     memcpy(aud_head[aud_current]->lpData, data, siz);
      aud_head[aud_current]->dwBufferLength= (DWORD)siz;
 
      //debug("Output buffer %d", aud_current);
      rv= waveOutWrite(aud_handle, aud_head[aud_current], sizeof(WAVEHDR));
 
      if (rv != MMSYSERR_NOERROR) {
-        char buf[255];
-        waveOutGetErrorText(rv, buf, sizeof(buf)-1);
-        error("Error writing a fragment to the audio device:\n  %s", buf);
+        char wbuf[255];
+        waveOutGetErrorText(rv, wbuf, sizeof(wbuf)-1);
+        error("Error writing a fragment to the audio device:\n  %s", wbuf);
      }
    
      aud_cnt++; 
@@ -1765,7 +1878,7 @@ writeOut(char *buf, int siz) {
     // Wait until there is space
     while (new_wr == aud_rd) delay(20);
 
-    memcpy(aud_buf[aud_wr], buf, siz);
+    memcpy(aud_buf[aud_wr], data, siz);
     aud_wr= new_wr;
 
     return;
@@ -1790,16 +1903,16 @@ writeOut(char *buf, int siz) {
 	 }
 	 error("ALSA write error: %s", snd_strerror(rv));
       }
-      buf += rv * out_bps;
+      data += rv * out_bps;
       frames -= rv;
     }
     return;
   }
 #endif
 
-  while (-1 != (rv= write(out_fd, buf, siz))) {
+  while (-1 != (rv= write(out_fd, data, siz))) {
     if (0 == (siz -= rv)) return;
-    buf += rv;
+    data += rv;
   }
   error("Output error");
 }
@@ -1841,7 +1954,7 @@ corrVal(int running) {
    Channel *ch;
    Voice *v0, *v1, *vv;
    double rat0, rat1;
-   int trigger= 0;
+   int trig= 0;
    
    // Move to the correct period
    while ((now >= t0) ^ (now >= t1) ^ (t1 > t0)) {
@@ -1859,7 +1972,7 @@ corrVal(int running) {
 	 }
 	 dispCurrPer(stderr); status(0);
       }
-      trigger= 1;		// Trigger bells or whatever
+      trig= 1;		// Trigger bells or whatever
    }
    
    // Run through to calculate voice settings for current time
@@ -1972,7 +2085,7 @@ corrVal(int running) {
        case 3:
 	  ch->amp= (int)vv->amp;
 	  ch->inc1= (int)(vv->carr / out_rate * ST_SIZ * 65536);
-	  if (trigger) {		// Trigger the bell only on entering the period
+	  if (trig) {		// Trigger the bell only on entering the period
 	     ch->off2= ch->amp;
 	     ch->inc2= out_rate/20;
 	  }
@@ -2432,7 +2545,7 @@ OSStatus mac_callback(AudioDeviceID inDevice,
 
 void 
 writeWAV() {
-  char buf[44], *p= buf;
+  char hdr[44], *p= hdr;
 
   if (byte_count + 36 != (int)(byte_count + 36)) {
      int tmp;
@@ -2453,7 +2566,11 @@ writeWAV() {
   addU4(0x0004 + 0x10000*(out_bps*4));	// 2,4 -> 8,16 - always assume stereo
   addStr("data");
   addU4(byte_count);
-  writeOut(buf, 44);
+  // NB hdr, not buf: buf is now the engine's 4096-byte parse-line buffer
+  // (through the name macro), and writing 44 bytes of it as the header
+  // produces a WAV that starts "00:0" instead of "RIFF" -- caught by the
+  // audio goldens, not by the compiler.
+  writeOut(hdr, 44);
 
   if (!opt_Q)
      warn("Outputting %d-bit WAV data at %d Hz, file size %d bytes",
@@ -2669,9 +2786,9 @@ correctPeriods() {
     Period *pp= per;
     do {
       if (pp->fi == -1) {
-	int per= t_per0(pp->tim, pp->nxt->tim);
-	if (per < fade_int) {
-	  int adj= (fade_int - per) / 2, adj0, adj1;
+	int plen= t_per0(pp->tim, pp->nxt->tim);
+	if (plen < fade_int) {
+	  int adj= (fade_int - plen) / 2, adj0, adj1;
 	  adj0= t_per0(pp->prv->tim, pp->tim);
 	  adj0= (adj < adj0) ? adj : adj0;
 	  adj1= t_per0(pp->nxt->tim, pp->nxt->nxt->tim);
@@ -2986,7 +3103,7 @@ readNameDef() {
       
       bd= (BlockDef*) Alloc(sizeof(*bd));
       *prvp= bd; prvp= &bd->nxt;
-      bd->lin= StrDup(lin);
+      bd->blin= StrDup(lin);
     }
     
     // Hit EOF before }
@@ -3150,8 +3267,8 @@ readTimeLine() {
     while (bd) {
       lin= buf; lin_copy= buf_copy;
       // 'prep' grows with each level of block nesting, so bound the write
-      if ((size_t)snprintf(lin, sizeof(buf), "%s%s", prep, bd->lin) >= sizeof(buf))
-	error("Block expansion line too long, line %d:\n  %s", in_lin, bd->lin);
+      if ((size_t)snprintf(lin, sizeof(buf), "%s%s", prep, bd->blin) >= sizeof(buf))
+	error("Block expansion line too long, line %d:\n  %s", in_lin, bd->blin);
       strcpy(lin_copy, lin);
       blk_depth++;
       readTimeLine();		// This may recurse, and that's why we're StrDuping the string
@@ -3563,6 +3680,15 @@ create_slide(int ac, char **av) {
    // correctPeriods() is called by main() once parsing is complete
 }   
 
+#ifdef OGG_DECODE
+#include "oggdec.c"
+#endif
+#ifdef MP3_DECODE
+#include "mp3dec.c"
+#endif
+#if defined(HAVE_FLAC) || defined(HAVE_OPUS)
+#include "encdec.c"
+#endif
 #ifdef SBAGEN_LIB
 #include "engine.c"
 #endif

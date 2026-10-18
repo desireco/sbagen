@@ -17,48 +17,60 @@
 #include <string.h>
 #include "sbagenlib.h"
 
-static short *sink_buf;			// caller's samples
-static size_t sink_len;			// capacity in bytes
-static size_t sink_fill;		// bytes written so far
+// The sink lives in the engine (e->lib_sink*), not here: these calls come
+// from writeOut() with E_current already pointing at the rendering engine,
+// so concurrent renders each fill their own buffer.
 
 // Called from writeOut() when out_fd == LIB_SINK_FD.  A short overrun is an
-// internal error -- sink_len is sized above the largest possible render --
-// but silently truncating audio would be worse than dying loudly.
+// internal error -- lib_sink_len is sized above the largest possible render
+// -- but silently truncating audio would be worse than dying loudly.
 void
-sbagen_sink_write(const char *buf, int siz) {
-  if (sink_fill + (size_t)siz > sink_len)
+sbagen_sink_write(const char *data, int siz) {
+  // NB: lib_sink* are Engine fields through the name macros; E_current
+  // already points at the rendering engine when writeOut() calls this.
+  if (lib_sink_fill + (size_t)siz > lib_sink_len)
     error("Library sink overflow: %zu written + %d exceeds %zu capacity",
-	  sink_fill, siz, sink_len);
-  memcpy((char*)sink_buf + sink_fill, buf, siz);
-  sink_fill += siz;
+	  lib_sink_fill, siz, lib_sink_len);
+  memcpy((char*)lib_sink + lib_sink_fill, data, siz);
+  lib_sink_fill += siz;
 }
 
 void
-sbagen_free(short *buf) {
-  free(buf);
+sbagen_free(short *mem) {
+  free(mem);
 }
 
 int
 sbagen_render_immediate(const char *specs, int rate, int len_ms,
 			int fade_ms, short **out, int *nframes) {
-  static int inited= 0;
+  Engine *saved= E_current;
+  Engine *e;
   char *av[1];
 
   if (!specs || !*specs) error("sbagen_render_immediate: empty tone-spec");
   if (rate <= 0 || len_ms <= 0) error("sbagen_render_immediate: bad rate/length");
   if (!out || !nframes) error("sbagen_render_immediate: null out param");
 
-  // One-time setup mirroring main(): endianness probe and the sine table.
-  // init_sin_table() allocates, so it must not run twice.
-  if (!inited) {
-    short test= 0x1100;
-    bigendian= ((char*)&test)[0] != 0;
-    init_sin_table();
-    inited= 1;
-  }
+  // Fresh engine per render: the caller gets samples out, and every table
+  // the parse allocates (sin table, waves, periods) is freed at the end.
+  // E_current is thread-local, so two threads can render concurrently,
+  // each against its own engine -- tests/unit_two proves it.
+  e= engine_new();
+  if (!e) error("sbagen_render_immediate: out of memory for engine");
+  E_current= e;
 
-  // Reset the knobs the render reads.  These are normally set by the CLI
-  // option parser; the library owns them for the duration of a render.
+  {	// Machine endianness probe (global, not per-engine)
+    static int be_done= 0;
+    if (!be_done) {
+      short test= 0x1100;
+      bigendian= ((char*)&test)[0] != 0;
+      be_done= 1;
+    }
+  }
+  init_sin_table();		// Per-engine: allocates e->sin_table, freed by engine_free()
+
+  // The knobs the render reads.  These are normally set by the CLI option
+  // parser; the library owns them for the duration of a render.
   out_rate= rate;
   out_rate_def= 0;
   out_mode= 1;				// 16-bit
@@ -95,23 +107,24 @@ sbagen_render_immediate(const char *specs, int rate, int len_ms,
     while (blen & (blen-1)) blen &= blen-1;
     out_bsiz= blen * 2;			// out_mode 1: 2 bytes per sample
     out_bps= 4;				// 16-bit stereo
-    sink_len= (size_t)out_bps * ((size_t)rate * len_ms / 1000 + 1);
-    sink_len= (sink_len + out_bsiz - 1) / out_bsiz * out_bsiz + out_bsiz;
-    sink_buf= (short*)Alloc(sink_len);
-    sink_fill= 0;
+    lib_sink_len= (size_t)out_bps * ((size_t)rate * len_ms / 1000 + 1);
+    lib_sink_len= (lib_sink_len + out_bsiz - 1) / out_bsiz * out_bsiz + out_bsiz;
+    lib_sink= (short*)Alloc(lib_sink_len);
+    lib_sink_fill= 0;
     out_fd= LIB_SINK_FD;
   }
 
   loop();
 
-  // Release the render buffers the loop allocated; the sink belongs to the
-  // caller.  A second render re-allocates them.
-  free(out_buf); out_buf= 0;
-  free(tmp_buf); tmp_buf= 0;
-  out_fd= -1;
+  *out= lib_sink;			// Caller owns the samples
+  *nframes= (int)(lib_sink_fill / 4);
 
-  *out= sink_buf;
-  *nframes= (int)(sink_fill / 4);
+  // Release everything the parse and render allocated (period ring, name
+  // defs, waves, sin table, buffers).  engine_free() memsets the engine;
+  // free the shell afterwards and hand E_current back.
+  engine_free(e);
+  free(e);
+  E_current= saved;
   return 0;
 }
 

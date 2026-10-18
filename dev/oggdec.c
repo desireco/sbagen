@@ -15,14 +15,25 @@
 // Tremor embeds them by value, so the real struct is 864 bytes -- and any
 // build that mixes the old headers with a current library overflows the
 // caller's struct by 416 bytes the moment ov_open() touches it.
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 #include "libs64/ivorbiscodec.h"
-#include "libs64/ivorbisfile.h"
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 
-extern FILE *mix_in;
-extern int mix_cnt;
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
+#include "libs64/ivorbisfile.h"
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
+
+// NB: this file is included by sbagen.c AFTER the Engine name macros, so
+// out_rate/out_rate_def here are the current engine's fields.  The mix
+// reader thread callbacks (ogg_read/looper_read) must NOT touch engine
+// state: they only use decoder-local state and mix_fp, which main()
+// captures from e->mix_in.  mix_cnt is likewise reached by macro.
 extern void *Alloc(size_t);
 extern void error(char *fmt, ...);
-extern int out_rate, out_rate_def;
 
 void ogg_init() ;
 void ogg_term() ;
@@ -45,7 +56,7 @@ ogg_init() {
    int a;
 
    // Setup OGG decoder
-   if (0 > ov_open(mix_in, &oggfile, NULL, 0)) 
+   if (0 > ov_open(mix_fp, &oggfile, NULL, 0)) 
       error("Input does not appear to be an Ogg bitstream");
 
    // Check for ReplayGain
@@ -198,7 +209,7 @@ typedef struct {
    OggVorbis_File ogg;	// File
    char *rd;		// Current read position in 'data'
    int off;		// Sample-offset that we started playing at for this segment
-   int chan;		// Which channel do we below to?  0 or 1; if 1 then ch2_swap applies
+   int achan;		// Which channel do we below to?  0 or 1; if 1 then ch2_swap applies
    int mode;		// Current mode: 0 inactive, 1 waiting, 2 fade-in, 3 hold, 4 fade-out
    int cnt;		// Current count-down
    int cnt_all;		// Total sample count for fade-in/hold/fade-out 
@@ -344,14 +355,14 @@ looper_init() {
    zxrand_seed= 0xFFFF & time(NULL);
 
    // Find the length of the OGG file and load it into memory
-   if (0 != fseek(mix_in, 0, SEEK_END) ||
-       0 > (datlen= ftell(mix_in)))
+   if (0 != fseek(mix_fp, 0, SEEK_END) ||
+       0 > (datlen= ftell(mix_fp)))
       error("Can't determine length of OGG file: %s", strerror(errno));
    
    data= ALLOC_ARR(datlen, char);
    data_end= data + datlen;
-   if (0 != fseek(mix_in, 0, SEEK_SET) ||
-       1 != fread(data, datlen, 1, mix_in))
+   if (0 != fseek(mix_fp, 0, SEEK_SET) ||
+       1 != fread(data, datlen, 1, mix_fp))
       error("Can't read loopable OGG file into memory: %s", strerror(errno));
 
    // Open each of the three OGG streamers
@@ -510,16 +521,16 @@ looper_read(int *dst, int dlen) {
 	    if (aa->mode > 1 && 
 		aa->b_rd == aa->b_end) {
 	       int sect;
-	       char *buf= (char*)aa->buf0;	
+	       char *rbuf= (char*)aa->buf0;	
 	       int len= (aa->buf1-aa->buf0)*sizeof(aa->buf0[0]);
-	       int rv= ov_read(&aa->ogg, buf, len, &sect);
+	       int rv= ov_read(&aa->ogg, rbuf, len, &sect);
 	       if (rv < 0) {
 		  warn("Recoverable error in Ogg stream  ");
 		  continue;
 	       }
 	       if (rv == 0) {    // EOF; internal error?
 		  warn("Hit EOF in looping OGG stream, filling with zeros");
-		  memset(buf, 0, len);
+		  memset(rbuf, 0, len);
 		  rv= len;
 	       }
 	       if (rv & 3)
@@ -536,7 +547,7 @@ looper_read(int *dst, int dlen) {
 	    }
 	    
 	    // Playing fade-in / main part / fade-out
-	    if (aa->chan && ch2_swap) {
+	    if (aa->achan && ch2_swap) {
 	       // Output with swapped L+R
 	       while (cnt > 0 && aa->b_rd != aa->b_end) {
 		  uint amp= (~aa->amp) >> 16; amp= (~(amp*amp))>>21; amp *= ogg_mult;
@@ -708,7 +719,7 @@ looper_sched2() {
       // with 'aa', if active.
       if (!bb->mode) {
 	 // Setup a new segment for 'bb'
- 	 bb->chan= aa ? !aa->chan : 0;
+ 	 bb->achan= aa ? !aa->achan : 0;
 	 bb->off= -1;
 	 bb->mode= 1;
 	 bb->amp= 0;
@@ -757,8 +768,8 @@ looper_sched2() {
       // 'aa' and 'bb' should be on different channels.  We need to
       // create a 'cc' that continues where the shorter of 'aa' and
       // 'bb' leaves off.
-      if (aa->chan == bb->chan)
-	 error("UNEXPECTED: internal error, looper_sched2(), aa/bb on same chan");
+      if (aa->achan == bb->achan)
+	 error("UNEXPECTED: internal error, looper_sched2(), aa/bb on same achan");
 
       // Make 'aa' the shorter one
       if (CNT_TO_END(aa) > CNT_TO_END(bb)) {
@@ -766,7 +777,7 @@ looper_sched2() {
       }
 
       // Setup a new segment for 'cc'
-      cc->chan= aa->chan;
+      cc->achan= aa->achan;
       cc->cnt= CNT_TO_END(aa) - fade_cnt;
       cc->off= -1;
       cc->mode= 1;

@@ -92,7 +92,7 @@ endif
 # stream" at runtime.  Tremor must be built from Xiph's sources (see the
 # `codecs` target).
 
-.PHONY: all alsa asan lib unit test test-alsa check clean distclean help codecs
+.PHONY: all alsa asan lib unit unit-two test test-alsa check clean distclean help codecs
 
 all: $(TARGET)
 
@@ -117,7 +117,7 @@ endif
 # byte-identical to the CLI's by comparing the two directly.
 lib: $(SRCDIR)/libsbagen.a
 
-$(SRCDIR)/libsbagen.a: $(SRC) $(INCLUDES) $(SRCDIR)/sbagenlib.h
+$(SRCDIR)/libsbagen.a: $(SRC) $(INCLUDES) $(SRCDIR)/sbagenlib.h $(SRCDIR)/engine.c $(SRCDIR)/engine_names.h
 	$(CC) $(CFLAGS_COMMON) -DSBAGEN_LIB -O2 -c $(SRC) -o $(SRCDIR)/sbagen-lib.o
 	ar rcs $@ $(SRCDIR)/sbagen-lib.o
 
@@ -125,6 +125,12 @@ unit: tests/unit_render
 
 tests/unit_render: tests/unit_render.c $(SRCDIR)/libsbagen.a $(SRCDIR)/sbagenlib.h
 	$(CC) -O2 -I$(SRCDIR) tests/unit_render.c $(SRCDIR)/libsbagen.a $(CODEC_LIBS) $(LDLIBS) -o $@
+
+unit-two: tests/unit_two
+
+# NB -pthread: unit_two renders concurrently, one engine per thread
+tests/unit_two: tests/unit_two.c $(SRCDIR)/libsbagen.a $(SRCDIR)/sbagenlib.h
+	$(CC) -O2 -pthread -I$(SRCDIR) tests/unit_two.c $(SRCDIR)/libsbagen.a $(CODEC_LIBS) $(LDLIBS) -o $@
 
 asan: $(SRCDIR)/sbagen-asan
 
@@ -173,7 +179,7 @@ check:
 
 clean:
 	rm -f $(TARGET) $(SRCDIR)/sbagen-asan $(SRCDIR)/libsbagen.a \
-	      $(SRCDIR)/sbagen-lib.o tests/unit_render
+	      $(SRCDIR)/sbagen-lib.o tests/unit_render tests/unit_two
 
 distclean: clean
 	rm -f /tmp/err-*

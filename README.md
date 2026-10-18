@@ -147,11 +147,20 @@ spec, rate, length and fade, `tests/unit_render` output and
 `sbagen -Q -S -W` output are **byte-identical**. If the library ever
 diverges from the CLI, the suite fails.
 
+Engines are fully per-instance: each render parses into and renders from
+its own `Engine`, all mutable parser/DSP state included, reached through a
+thread-local current-engine pointer. Two threads can render two different
+sequences at the same time, and `tests/unit_two` proves both outputs are
+byte-identical to their CLI renders — concurrency may not change a single
+sample.
+
 Honest limitations: `error()` still exits the process (threading error
 returns through code that treats `exit` as its error handling is its own
-project); one render at a time; no mix input (`-m`) in-process. Reaching
-for the library made sense as the foundation for anything that wants
-SBaGen audio without shelling out — a GUI, a wasm build, MIDI control.
+project); mix input (`-m`) and compressed output (`-w`) are CLI-only — the
+backends stay process-global, which is safe because only the
+single-threaded CLI drives them. Reaching for the library made sense as
+the foundation for anything that wants SBaGen audio without shelling out —
+a GUI, a wasm build, MIDI control.
 
 ## Building
 
@@ -167,34 +176,6 @@ build the required 64-bit libraries -- see below.
 
 Compressed output (`-w`) needs `libFLAC` and `libopus`, both detected with
 `pkg-config`. Without them `-w` reports that no encoder is compiled in.
-
-## Using as a library
-
-`make lib` builds `dev/libsbagen.a` — the same sources compiled with
-`-DSBAGEN_LIB`, which drops `main()` and exposes an in-process render API
-([`dev/sbagenlib.h`](dev/sbagenlib.h)):
-
-```c
-#include "sbagenlib.h"
-
-short *buf; int nframes;
-sbagen_render_immediate("200+10/0.5 pink/0.15", 44100, 5000, 3000, &buf, &nframes);
-// buf holds nframes*2 interleaved 16-bit LE samples: 5 s at 44.1 kHz.
-sbagen_free(buf);
-```
-
-The library renders through the CLI's own parse → `correctPeriods()` →
-`corrVal()`/`outChunk()` path, delivering to a memory buffer instead of a
-file — and the test suite proves the two stay in lockstep: for the same
-spec, rate, length and fade, `tests/unit_render` output and
-`sbagen -Q -S -W` output are **byte-identical**. If the library ever
-diverges from the CLI, the suite fails.
-
-Honest limitations: `error()` still exits the process (threading error
-returns through code that treats `exit` as its error handling is its own
-project); one render at a time; no mix input (`-m`) in-process. Reaching
-for the library made sense as the foundation for anything that wants
-SBaGen audio without shelling out — a GUI, a wasm build, MIDI control.
 
 ## Building the codec libraries
 

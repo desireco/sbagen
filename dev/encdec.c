@@ -28,8 +28,18 @@
 //	20 ms frame is ready.
 //
 
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 #include <FLAC/stream_encoder.h>
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
+
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 #include <opus/opus.h>
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
+
 
 // Ogg container, for Opus.  Raw Opus packets have no framing at all -- a
 // decoder cannot tell where one packet ends and the next begins, so a raw
@@ -43,9 +53,19 @@
 // clean checkout without running 'make codecs', and libogg is present on any
 // system that has libopus, so -w opus never depends on the decoder libraries.
 #ifdef HAVE_OGG_SYSTEM
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 #include <ogg/ogg.h>
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
+
 #else
+#define SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
 #include "libs64/ogg.h"
+#undef SBAGEN_ENGINE_NAMES_OFF
+#include "engine_names.h"
+
 #endif
 
 #define OGG_HEAD_SERIAL   0x524F4747u	// 'ROGG' as a CRC seed
@@ -271,9 +291,9 @@ enc_set(int kind, FILE *fp, int rate, int channels, int bits) {
 
 // enc_write(fp, buf, frames, channels)
 //
-//   frames counts sample frames; buf holds frames*channels interleaved shorts.
+//   frames counts sample frames; data holds frames*channels interleaved shorts.
 void
-enc_write(FILE *fp, const short *buf, int frames, int channels) {
+enc_write(FILE *fp, const short *data, int frames, int channels) {
   int a, i;
 
 #ifdef HAVE_FLAC
@@ -282,7 +302,7 @@ enc_write(FILE *fp, const short *buf, int frames, int channels) {
     int n= 0;
     for (a= 0; a<frames; a++) {
       for (i= 0; i<channels; i++)
-	 tmp[n++]= buf[a*channels + i];
+	 tmp[n++]= data[a*channels + i];
       if (n >= 8192 - channels) {	// keep one frame in reserve
 	 FLAC__stream_encoder_process_interleaved(flac_enc, tmp, n/channels);
 	 n= 0;
@@ -297,7 +317,7 @@ enc_write(FILE *fp, const short *buf, int frames, int channels) {
 #ifdef HAVE_OPUS
   if (enc_kind == ENC_OPUS) {
     for (a= 0; a<frames; a++)
-      opus_push(fp, buf[a*channels] / 32768.0f, buf[a*channels+1] / 32768.0f);
+      opus_push(fp, data[a*channels] / 32768.0f, data[a*channels+1] / 32768.0f);
     return;
   }
 #endif
